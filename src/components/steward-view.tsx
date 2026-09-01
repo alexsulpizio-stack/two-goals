@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 
-import { ProgressRing } from "@/components/mark";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,13 +15,14 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useAppState } from "@/hooks/use-app-state";
 import { formatShortDate, todayKey } from "@/lib/dates";
+import { SprintBoard } from "@/components/sprint-plan";
 import {
   formatDuration,
   formatMoney,
-  formatPercent,
   independencePlan,
+  sprintPlan,
 } from "@/lib/finance";
-import type { FinanceInputs } from "@/lib/types";
+import type { FinanceInputs, SprintMonths } from "@/lib/types";
 
 const fields: {
   key: keyof Pick<
@@ -60,6 +60,10 @@ export function StewardView() {
     () => independencePlan(state.finance),
     [state.finance]
   );
+  const sprint = useMemo(
+    () => sprintPlan(state.finance, state.finance.targetMonths),
+    [state.finance]
+  );
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
 
@@ -90,86 +94,36 @@ export function StewardView() {
     }));
   }
 
-  const insight = stewardshipInsight(plan, hydrated);
+  const insight = stewardshipInsight(plan, sprint, hydrated);
 
   return (
     <div className="flex flex-col gap-10">
       <section className="flex max-w-3xl flex-col gap-4">
         <p className="text-sm tracking-[0.18em] text-steward uppercase">Goal 02</p>
         <h1 className="font-heading text-4xl leading-[1.1] text-balance sm:text-5xl">
-          Live financially independent.
+          Independent in the next 6 to 12 months.
         </h1>
         <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
           The point is not a yacht. The point is freedom to follow — to give,
-          to rest, to change work without fear. Your FI number funds the life
-          you already intend to live, including generosity.
+          to rest, to change work without fear. This window is a sprint. The
+          ledger below tells you the surplus, the lump sum, or the smaller life
+          that would actually arrive on time.
         </p>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-        <Card className="bg-steward text-white ring-0">
-          <CardHeader>
-            <CardDescription className="text-white/70">
-              Path to independence
-            </CardDescription>
-            <CardTitle className="font-heading text-3xl">
-              {!hydrated
-                ? "…"
-                : plan.reached
-                  ? "You can stop working for money"
-                  : plan.hasInputs
-                    ? formatDuration(plan.monthsRemaining)
-                    : "Enter the ledger"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-5">
-            <div className="relative text-white">
-              <ProgressRing
-                value={hydrated ? plan.progress : 0}
-                trackClassName="stroke-white/20"
-              />
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-heading text-3xl">
-                  {hydrated ? Math.round(plan.progress * 100) : 0}%
-                </span>
-              </div>
-            </div>
-            <dl className="grid flex-1 gap-3 text-sm">
-              <Stat label="FI number" value={formatMoney(plan.fiNumber)} />
-              <Stat
-                label="Invested now"
-                value={formatMoney(state.finance.netWorth)}
-              />
-              <Stat
-                label="Annual life + giving"
-                value={formatMoney(plan.annualSpend)}
-              />
-            </dl>
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          <MiniStat
-            label="Savings rate"
-            value={formatPercent(plan.savingsRate)}
-            note={
-              plan.monthlySavings < 0
-                ? "Spending more than you earn"
-                : `${formatMoney(plan.monthlySavings)} / month`
-            }
-          />
-          <MiniStat
-            label="Giving rate"
-            value={formatPercent(plan.givingRate)}
-            note={`${formatMoney(plan.annualGiving)} a year`}
-          />
-          <MiniStat
-            label="Safe withdrawal"
-            value={`${state.finance.swr}%`}
-            note="Default is the 4% rule"
-          />
-        </div>
-      </section>
+      <SprintBoard
+        plan={plan}
+        sprint={sprint}
+        targetMonths={state.finance.targetMonths}
+        hasInputs={plan.hasInputs}
+        hydrated={hydrated}
+        onTargetMonths={(months: SprintMonths) =>
+          setState((previous) => ({
+            ...previous,
+            finance: { ...previous.finance, targetMonths: months },
+          }))
+        }
+      />
 
       {insight ? (
         <p className="max-w-3xl rounded-2xl border border-steward/20 bg-steward/5 px-5 py-4 text-sm leading-relaxed">
@@ -291,9 +245,11 @@ export function StewardView() {
                   giving — you need about {formatMoney(plan.fiNumber)} invested.
                   {plan.reached
                     ? " You are there. Keep seeking the kingdom."
-                    : plan.monthsRemaining === null
-                      ? " Right now savings and returns are not climbing toward that number."
-                      : ` At this pace, that is ${formatDuration(plan.monthsRemaining)}.`}
+                    : sprint.onTrack
+                      ? ` At this pace you arrive inside the ${state.finance.targetMonths}-month window.`
+                      : plan.monthsRemaining === null
+                        ? " Right now savings and returns are not climbing toward that number in time."
+                        : ` At this pace that is ${formatDuration(plan.monthsRemaining)} — outside the window. Use the sprint paths above.`}
                 </p>
               ) : (
                 <p>
@@ -364,37 +320,6 @@ export function StewardView() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-white/70">{label}</dt>
-      <dd className="font-heading text-xl">{value}</dd>
-    </div>
-  );
-}
-
-function MiniStat({
-  label,
-  value,
-  note,
-}: {
-  label: string;
-  value: string;
-  note: string;
-}) {
-  return (
-    <Card className="bg-card/80">
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="font-heading text-3xl">{value}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">{note}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
 function sliderNumber(value: number | readonly number[], fallback: number) {
   if (typeof value === "number") return value;
   return value[0] ?? fallback;
@@ -402,6 +327,7 @@ function sliderNumber(value: number | readonly number[], fallback: number) {
 
 function stewardshipInsight(
   plan: ReturnType<typeof independencePlan>,
+  sprint: ReturnType<typeof sprintPlan>,
   hydrated: boolean
 ) {
   if (!hydrated || !plan.hasInputs) return null;
@@ -409,16 +335,16 @@ function stewardshipInsight(
     return "The second goal is in hand. Do not let the portfolio become a master. Seek first the kingdom, and keep giving while you live.";
   }
   if (plan.monthlySavings < 0) {
-    return "This month the barn is emptying. Independence recedes until income rises or living costs fall. Giving can stay — cut the rest first.";
+    return "This month the barn is emptying. A 6–12 month sprint cannot start while living costs outrun income. Giving can stay — cut the rest first.";
   }
   if (plan.givingRate === 0) {
-    return "You have a path, but giving is still at zero. A Christian independence plan funds generosity on purpose, not as an afterthought.";
+    return "You have a deadline, but giving is still at zero. A Christian sprint funds generosity on purpose, not as an afterthought.";
   }
-  if (plan.monthsRemaining === null) {
-    return "Savings are not yet carrying you toward the number. Raise the gap between earning and spending, then let time work.";
+  if (!sprint.onTrack && sprint.cutsAloneInsufficient) {
+    return "Living lean is not enough by itself in this window. The honest remaining doors are more income or a lump sum.";
   }
-  if (plan.savingsRate >= 0.5) {
-    return "A high savings rate is a form of fasting from lifestyle. Keep the kingdom first so the fast does not become an idol.";
+  if (!sprint.onTrack) {
+    return "Work the sprint without worshiping it. Pick one door — surplus, lump sum, or a smaller life — and run it. Every dollar is on loan from the Lord.";
   }
-  return "Work the plan without worshiping it. Every dollar is on loan from the Lord who gives power to get wealth.";
+  return "You are inside the window. Keep the kingdom first so the sprint does not become an idol.";
 }

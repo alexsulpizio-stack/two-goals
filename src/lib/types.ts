@@ -10,6 +10,8 @@ export type PrayerEntry = {
   listening: string;
 };
 
+export type SprintMonths = 6 | 12;
+
 export type FinanceInputs = {
   netWorth: number;
   monthlyIncome: number;
@@ -17,6 +19,7 @@ export type FinanceInputs = {
   monthlyGiving: number;
   expectedReturn: number;
   swr: number;
+  targetMonths: SprintMonths;
 };
 
 export type NetWorthSnapshot = {
@@ -45,6 +48,7 @@ export const defaultFinance: FinanceInputs = {
   monthlyGiving: 0,
   expectedReturn: 5,
   swr: 4,
+  targetMonths: 12,
 };
 
 export const defaultState: AppState = {

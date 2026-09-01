@@ -2,7 +2,13 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-import { defaultState, emptyPractice, type AppState, type PracticeKind } from "@/lib/types";
+import {
+  defaultState,
+  emptyPractice,
+  type AppState,
+  type PracticeKind,
+  type SprintMonths,
+} from "@/lib/types";
 
 const STORAGE_KEY = "two-goals:v1";
 
@@ -10,11 +16,19 @@ let current: AppState = defaultState;
 let loaded = false;
 const listeners = new Set<() => void>();
 
+function asSprintMonths(value: unknown): SprintMonths {
+  return value === 6 ? 6 : 12;
+}
+
 function mergeState(parsed: Partial<AppState>): AppState {
   return {
     practices: parsed.practices ?? defaultState.practices,
     prayers: parsed.prayers ?? defaultState.prayers,
-    finance: { ...defaultState.finance, ...parsed.finance },
+    finance: {
+      ...defaultState.finance,
+      ...parsed.finance,
+      targetMonths: asSprintMonths(parsed.finance?.targetMonths),
+    },
     snapshots: parsed.snapshots ?? defaultState.snapshots,
   };
 }

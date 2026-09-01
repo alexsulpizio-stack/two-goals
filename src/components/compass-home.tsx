@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAppState } from "@/hooks/use-app-state";
-import { formatLongDate, lastNDates, todayKey } from "@/lib/dates";
-import { formatDuration, formatPercent, independencePlan } from "@/lib/finance";
+import { addMonths, formatLongDate, formatMonthYear, lastNDates, todayKey } from "@/lib/dates";
+import { formatDuration, formatPercent, independencePlan, sprintPlan } from "@/lib/finance";
 import { verseOfTheDay } from "@/lib/scripture";
 import { emptyPractice, type PracticeKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -32,6 +32,8 @@ export function CompassHome() {
   const verse = verseOfTheDay();
   const day = state.practices[today] ?? emptyPractice();
   const plan = independencePlan(state.finance);
+  const sprint = sprintPlan(state.finance, state.finance.targetMonths);
+  const deadline = formatMonthYear(addMonths(new Date(), state.finance.targetMonths));
   const week = lastNDates(7);
   const wordDays = week.filter((date) => state.practices[date]?.word).length;
   const prayerDays = week.filter((date) => state.practices[date]?.prayer).length;
@@ -48,8 +50,8 @@ export function CompassHome() {
         </h1>
         <p className="max-w-2xl text-lg leading-relaxed text-muted-foreground text-pretty">
           Eternal life is a gift, already finished in Jesus. Financial
-          independence is stewardship, so a paycheck cannot own you. Hold them
-          in that order.
+          independence is a 6–12 month sprint of stewardship, so a paycheck
+          cannot own you. Hold them in that order.
         </p>
       </section>
 
@@ -66,9 +68,9 @@ export function CompassHome() {
           href="/steward"
           kicker="Goal 02"
           title="Live financially independent"
-          body="Fund a quiet, generous life. Spend less than you earn, give first, and let compound growth buy back your time."
+          body={`In the next ${state.finance.targetMonths} months — by ${hydrated ? deadline : "this year"}. Spend less than you earn, give first, and close the gap before the deadline.`}
           tone="steward"
-          cta="Steward the rest"
+          cta="Open the sprint"
         />
       </section>
 
@@ -94,8 +96,10 @@ export function CompassHome() {
               {hydrated && plan.hasInputs
                 ? plan.reached
                   ? "The money question is settled"
-                  : formatDuration(plan.monthsRemaining)
-                : "The path is waiting"}
+                  : sprint.onTrack
+                    ? `On pace for ${deadline}`
+                    : `Off pace for ${deadline}`
+                : "The 6–12 month sprint"}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-5 pt-5">
@@ -114,27 +118,27 @@ export function CompassHome() {
               {hydrated && plan.hasInputs ? (
                 <>
                   <p>
-                    Savings rate{" "}
+                    This path{" "}
                     <span className="font-medium text-foreground">
-                      {formatPercent(plan.savingsRate)}
+                      {formatDuration(plan.monthsRemaining)}
                     </span>
                   </p>
                   <p>
-                    Giving rate{" "}
+                    Savings rate{" "}
                     <span className="font-medium text-foreground">
-                      {formatPercent(plan.givingRate)}
+                      {formatPercent(plan.savingsRate)}
                     </span>
                   </p>
                   <Link
                     href="/steward"
                     className="text-sm font-medium underline-offset-4 hover:underline"
                   >
-                    Open the ledger
+                    Open the sprint
                   </Link>
                 </>
               ) : (
                 <p className="text-muted-foreground">
-                  Enter income, giving, and net worth to see years to freedom.
+                  Enter income, giving, and net worth to see what 6–12 months requires.
                 </p>
               )}
             </div>

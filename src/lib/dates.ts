@@ -37,3 +37,13 @@ export function lastNDates(n: number, from = new Date()): string[] {
     return todayKey(date);
   });
 }
+
+export function addMonths(date: Date, months: number): Date {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+export function formatMonthYear(date: Date): string {
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
