@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useAppState } from "@/hooks/use-app-state";
 import { formatShortDate, todayKey } from "@/lib/dates";
+import { QuickenImport } from "@/components/quicken-import";
 import { SprintBoard } from "@/components/sprint-plan";
 import {
   formatDuration,
@@ -107,9 +108,12 @@ export function StewardView() {
           The point is not a yacht. The point is freedom to follow — to give,
           to rest, to change work without fear. This window is a sprint. The
           ledger below tells you the surplus, the lump sum, or the smaller life
-          that would actually arrive on time.
+          that would actually arrive on time. If the books already live in
+          Quicken, import them first and the sprint will use those numbers.
         </p>
       </section>
+
+      <QuickenImport hydrated={hydrated} state={state} setState={setState} />
 
       <SprintBoard
         plan={plan}

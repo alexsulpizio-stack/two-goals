@@ -7,8 +7,8 @@ import {
   monthsToTarget,
   requiredMonthlyContribution,
   sprintPlan,
-} from "../src/lib/finance.ts";
-import { defaultFinance } from "../src/lib/types.ts";
+} from "../src/lib/finance";
+import { defaultFinance } from "../src/lib/types";
 
 const alreadyThere = monthsToTarget({
   present: 1_000_000,
