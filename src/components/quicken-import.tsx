@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FileSpreadsheet, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ export function QuickenImport({
   state: AppState;
   setState: (updater: (previous: AppState) => AppState) => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [bundle, setBundle] = useState<QuickenBundle | null>(null);
   const [windowMonths, setWindowMonths] = useState<WindowMonths>(12);
   const [status, setStatus] = useState("");
@@ -61,7 +62,8 @@ export function QuickenImport({
     setError("");
     setApplied(false);
     setSelectedNames(list.map((file) => file.name).join(", "));
-    setStatus(`Reading ${list.map((file) => file.name).join(", ")}…`);
+    setStatus(`Reading ${list.map((file) => `${file.name} (${Math.max(1, Math.round(file.size / 1024))} KB)`).join(", ")}…`);
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
     try {
       const parsed = await Promise.all(list.map((file) => readDroppedFile(file)));
       finishImport(mergeBundles(parsed));
@@ -178,9 +180,8 @@ export function QuickenImport({
       </CardHeader>
       <CardContent className="flex flex-col gap-5 pt-5">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Export from Quicken, then choose the file below. After it is read you
-          should see monthly income, living, and giving in this same card. Then
-          click Apply to the ledger.
+          Export from Quicken, choose the file, then click <span className="font-medium text-foreground">Read file</span>.
+          Totals for that file appear in this card. Then apply them to the ledger.
         </p>
 
         <details className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3 text-sm">
@@ -220,18 +221,32 @@ export function QuickenImport({
             Choose a .qif or .csv file
           </div>
           <input
+            ref={inputRef}
             type="file"
             accept=".qif,.csv,.txt,.tsv,.QIF,.CSV,text/plain"
             multiple
             disabled={busy}
             className="block w-full max-w-lg cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])];
-              event.target.value = "";
+            onChange={() => {
+              const files = [...(inputRef.current?.files ?? [])];
+              setSelectedNames(files.map((file) => file.name).join(", "));
               void ingestFiles(files);
             }}
           />
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              disabled={busy}
+              onClick={() => {
+                const files = [...(inputRef.current?.files ?? [])];
+                if (files.length === 0) {
+                  setError("Choose a .qif file first, then click Read file.");
+                  return;
+                }
+                void ingestFiles(files);
+              }}
+            >
+              Read file
+            </Button>
             <Button
               variant="outline"
               disabled={busy}
@@ -245,11 +260,12 @@ export function QuickenImport({
               Load sample
             </Button>
             {selectedNames ? (
-              <p className="text-sm text-muted-foreground">Selected: {selectedNames}</p>
+              <p className="text-sm text-muted-foreground">{selectedNames}</p>
             ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
-            You can also drop files onto this box, or paste QIF text below.
+            You can also drop files onto this box, or paste QIF text below. After
+            the file name appears next to Choose Files, click Read file.
           </p>
         </div>
 
