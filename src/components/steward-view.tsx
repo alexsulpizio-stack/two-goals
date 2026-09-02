@@ -20,6 +20,7 @@ import {
   monthlySurplus,
   type LedgerSnapshot,
 } from "@/lib/ledger";
+import { LedgerWhy } from "@/components/ledger-why";
 import { SprintBoard } from "@/components/sprint-plan";
 import {
   formatDuration,
@@ -40,22 +41,22 @@ const fields: {
   {
     key: "netWorth",
     label: "Invested net worth",
-    hint: "What you could live on if work stopped: investments, not your house if you still need to live in it.",
+    hint: "Starting line. Independence is this number reaching the nest egg the sprint names.",
   },
   {
     key: "monthlyIncome",
     label: "Monthly income",
-    hint: "Take-home, after tax. The number that actually lands.",
+    hint: "How fast the nest egg can grow. The sprint asks if this, minus living and giving, is enough in time.",
   },
   {
     key: "monthlyExpenses",
     label: "Monthly living expenses",
-    hint: "The life you want to fund, not the leanest month you could survive.",
+    hint: "Cuts twice: a bigger life needs a bigger nest egg, and leaves less to invest each month.",
   },
   {
     key: "monthlyGiving",
     label: "Monthly giving",
-    hint: "First fruits. Independence that starves generosity is only a bigger barn.",
+    hint: "Part of the life you fund, not leftovers. It raises the FI number on purpose.",
   },
 ];
 
@@ -157,7 +158,6 @@ export function StewardView() {
     }));
   }
 
-  const insight = stewardshipInsight(plan, sprint, hydrated);
   const snapshots = state.snapshots;
   const latest = recordNote?.kind === "saved" ? recordNote.snapshot : snapshots[0];
   const surplus = monthlySurplus(state.finance);
@@ -171,9 +171,9 @@ export function StewardView() {
         </h1>
         <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
           The point is not a yacht. The point is freedom to follow — to give,
-          to rest, to change work without fear. This window is a sprint. Enter
-          the ledger by hand. It tells you the surplus, the lump sum, or the
-          smaller life that would actually arrive on time.
+          to rest, to change work without fear. The ledger exists to tell you
+          whether this month’s surplus, a lump sum, or a smaller life would
+          actually arrive on time.
         </p>
       </section>
 
@@ -191,18 +191,20 @@ export function StewardView() {
         }
       />
 
-      {insight ? (
-        <p className="max-w-3xl rounded-2xl border border-steward/20 bg-steward/5 px-5 py-4 text-sm leading-relaxed">
-          {insight}
-        </p>
-      ) : null}
+      <LedgerWhy
+        plan={plan}
+        sprint={sprint}
+        finance={state.finance}
+        snapshots={snapshots}
+        hydrated={hydrated}
+      />
 
       <section className="grid gap-4 lg:grid-cols-2">
         <Card className="bg-card/80">
           <CardHeader className="border-b">
             <CardDescription>The ledger</CardDescription>
             <CardTitle className="font-heading text-2xl">
-              What you have, earn, spend, and give
+              The numbers the deadline uses
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-5 pt-5">
@@ -296,8 +298,8 @@ export function StewardView() {
               </ul>
               {snapshots.length === 0 && recordNote?.kind !== "saved" ? (
                 <p className="text-sm text-muted-foreground">
-                  Record today to keep net worth, income, living, and giving
-                  together, so you can watch the climb.
+                  Record today. That is how you know whether the gap shrank,
+                  not only whether you typed.
                 </p>
               ) : null}
             </div>
@@ -427,28 +429,4 @@ export function StewardView() {
 function sliderNumber(value: number | readonly number[], fallback: number) {
   if (typeof value === "number") return value;
   return value[0] ?? fallback;
-}
-
-function stewardshipInsight(
-  plan: ReturnType<typeof independencePlan>,
-  sprint: ReturnType<typeof sprintPlan>,
-  hydrated: boolean
-) {
-  if (!hydrated || !plan.hasInputs) return null;
-  if (plan.reached) {
-    return "The second goal is in hand. Do not let the portfolio become a master. Seek first the kingdom, and keep giving while you live.";
-  }
-  if (plan.monthlySavings < 0) {
-    return "This month the barn is emptying. A 6–12 month sprint cannot start while living costs outrun income. Giving can stay — cut the rest first.";
-  }
-  if (plan.givingRate === 0) {
-    return "You have a deadline, but giving is still at zero. A Christian sprint funds generosity on purpose, not as an afterthought.";
-  }
-  if (!sprint.onTrack && sprint.cutsAloneInsufficient) {
-    return "Living lean is not enough by itself in this window. The honest remaining doors are more income or a lump sum.";
-  }
-  if (!sprint.onTrack) {
-    return "Work the sprint without worshiping it. Pick one door — surplus, lump sum, or a smaller life — and run it. Every dollar is on loan from the Lord.";
-  }
-  return "You are inside the window. Keep the kingdom first so the sprint does not become an idol.";
 }

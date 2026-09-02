@@ -82,7 +82,7 @@ export function SprintBoard({
           {!hydrated
             ? "…"
             : !hasInputs
-              ? "Enter the ledger to see the sprint"
+              ? "Enter net worth, income, living, and giving. Those four numbers decide if the deadline is possible."
               : sprint.reached
                 ? "You can stop working for money"
                 : sprint.onTrack

@@ -36,6 +36,6 @@ Years remaining assume monthly savings keep going and invested assets earn the r
 
 The 6- and 12-month sprint then asks the reverse question: what monthly surplus, lump sum today, or living-cost ceiling would actually hit that FI number inside the window. Cutting living costs is double-powerful — you save more and you need a smaller nest egg.
 
-Record today from the ledger whenever you update net worth, income, living costs, or giving. Each snapshot keeps those four numbers together so you can watch the climb.
+The ledger is not a diary. Net worth, income, living, and giving decide the nest egg you must hold, how fast you can get there, and which door — more surplus, a lump sum, or a smaller life — would actually hit the 6–12 month deadline. Record today so the next visit can tell you whether the gap shrank.
 
 This is a planning sketch, not advice. Scripture quotations are from the World English Bible (public domain).

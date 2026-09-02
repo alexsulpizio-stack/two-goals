@@ -54,6 +54,43 @@ export function monthlySurplus(ledger: Pick<
   return ledger.monthlyIncome - ledger.monthlyExpenses - ledger.monthlyGiving;
 }
 
+export function snapshotTarget(
+  snapshot: LedgerSnapshot,
+  swrPercent: number
+) {
+  const annual =
+    (Math.max(0, snapshot.monthlyExpenses) + Math.max(0, snapshot.monthlyGiving)) *
+    12;
+  const swr = swrPercent > 0 ? swrPercent / 100 : 0.04;
+  const fiNumber = annual > 0 ? annual / swr : 0;
+  const surplus = monthlySurplus(snapshot);
+  const gap = Math.max(0, fiNumber - Math.max(0, snapshot.netWorth));
+  const progress =
+    fiNumber > 0 ? Math.min(1, Math.max(0, snapshot.netWorth / fiNumber)) : 0;
+  return { fiNumber, surplus, gap, progress };
+}
+
+export function snapshotDelta(
+  snapshots: LedgerSnapshot[],
+  swrPercent: number
+) {
+  if (snapshots.length < 2) return null;
+  const newestRow = snapshots[0];
+  const oldestRow = snapshots[snapshots.length - 1];
+  if (!newestRow || !oldestRow || newestRow.date === oldestRow.date) return null;
+  const newest = snapshotTarget(newestRow, swrPercent);
+  const oldest = snapshotTarget(oldestRow, swrPercent);
+  return {
+    from: oldestRow,
+    to: newestRow,
+    newest,
+    oldest,
+    gapChange: newest.gap - oldest.gap,
+    netWorthChange: newestRow.netWorth - oldestRow.netWorth,
+    surplusChange: newest.surplus - oldest.surplus,
+  };
+}
+
 function asMoney(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
