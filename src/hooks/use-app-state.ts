@@ -72,7 +72,10 @@ function emit(next: AppState) {
 export function useAppState() {
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const hydrated = useSyncExternalStore(
-    () => () => undefined,
+    (onStoreChange) => {
+      const id = requestAnimationFrame(() => onStoreChange());
+      return () => cancelAnimationFrame(id);
+    },
     () => true,
     () => false
   );
