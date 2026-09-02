@@ -187,35 +187,34 @@ export function QuickenImport({
               .qif, .csv, or Excel saved as CSV
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <Button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              disabled={busy}
-            >
+          <div className="flex flex-col items-center gap-3">
+            <label className="relative inline-flex h-10 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80">
               Choose files
-            </Button>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".qif,.csv,.txt,.tsv,.qfx,.ofx"
+                multiple
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={(event) => {
+                  if (event.target.files) void ingestFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+            </label>
             <Button
-              type="button"
               variant="outline"
               disabled={busy}
-              onClick={() => void loadSample(ingestFiles)}
+              onClick={() => {
+                void loadSample(ingestFiles).catch(() => {
+                  setError("The sample files could not be loaded.");
+                });
+              }}
             >
               <FileSpreadsheet className="size-4" />
               Load sample
             </Button>
           </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".qif,.csv,.txt,.tsv,.qfx,.ofx"
-            multiple
-            className="sr-only"
-            onChange={(event) => {
-              if (event.target.files) void ingestFiles(event.target.files);
-              event.target.value = "";
-            }}
-          />
         </div>
 
         {error ? (
