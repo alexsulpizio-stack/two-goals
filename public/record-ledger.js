@@ -712,8 +712,11 @@
       nameInput.value = stored.name || "";
     }
     if (monthlyInput instanceof HTMLInputElement && document.activeElement !== monthlyInput) {
-      const amount = stored.monthly > 0 ? stored.monthly : suggested;
-      monthlyInput.value = amount ? String(Math.round(amount)) : "";
+      if (stored.monthly > 0) {
+        monthlyInput.value = String(Math.round(stored.monthly));
+      } else if (!monthlyInput.value.trim() && suggested > 0) {
+        monthlyInput.value = String(Math.round(suggested));
+      }
     }
     if (
       (askInput instanceof HTMLTextAreaElement || askInput instanceof HTMLInputElement) &&
