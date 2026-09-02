@@ -34,7 +34,7 @@ export function CompassHome() {
   const day = state.practices[today] ?? emptyPractice();
   const plan = independencePlan(state.finance);
   const sprint = sprintPlan(state.finance, state.finance.targetMonths);
-  const move = nextMove(plan, sprint, state.finance, hydrated);
+  const move = nextMove(plan, sprint, state.finance);
   const deadline = formatMonthYear(addMonths(new Date(), state.finance.targetMonths));
   const week = lastNDates(7);
   const wordDays = week.filter((date) => state.practices[date]?.word).length;
@@ -95,7 +95,7 @@ export function CompassHome() {
           <CardHeader className="border-b">
             <CardDescription>Independence</CardDescription>
             <CardTitle className="font-heading text-2xl">
-              {hydrated && plan.hasInputs ? move.headline : "No finish line yet"}
+              {plan.hasInputs ? move.headline : "No finish line yet"}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-5 pt-5">
@@ -111,7 +111,7 @@ export function CompassHome() {
               </div>
             </div>
             <div className="flex flex-col gap-2 text-sm">
-              {hydrated && plan.hasInputs ? (
+              {plan.hasInputs ? (
                 <>
                   {move.lines[0] ? <p>{move.lines[0]}</p> : null}
                   <Link

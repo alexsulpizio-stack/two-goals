@@ -114,8 +114,8 @@ export function useAppState() {
   const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const hydrated = useSyncExternalStore(
     (onStoreChange) => {
-      const id = requestAnimationFrame(() => onStoreChange());
-      return () => cancelAnimationFrame(id);
+      const id = window.setTimeout(onStoreChange, 0);
+      return () => window.clearTimeout(id);
     },
     () => true,
     () => false

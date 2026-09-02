@@ -18,7 +18,6 @@ export function SprintBoard({
   finance,
   targetMonths,
   hasInputs,
-  hydrated,
   onTargetMonths,
 }: {
   plan: IndependencePlan;
@@ -26,12 +25,11 @@ export function SprintBoard({
   finance: FinanceInputs;
   targetMonths: SprintMonths;
   hasInputs: boolean;
-  hydrated: boolean;
   onTargetMonths: (months: SprintMonths) => void;
 }) {
   const deadline = formatMonthYear(addMonths(new Date(), targetMonths));
   const sisterWindow: SprintMonths = targetMonths === 6 ? 12 : 6;
-  const move = nextMove(plan, sprint, finance, hydrated);
+  const move = nextMove(plan, sprint, finance);
 
   return (
     <section className="flex flex-col gap-4">
@@ -66,7 +64,7 @@ export function SprintBoard({
       <div
         className={cn(
           "rounded-2xl p-6 text-white sm:p-8",
-          !hydrated || !hasInputs
+          !hasInputs
             ? "bg-steward"
             : sprint.reached || sprint.onTrack
               ? "bg-steward"
@@ -91,7 +89,7 @@ export function SprintBoard({
             {move.footer}
           </p>
         ) : null}
-        {hydrated && hasInputs && !sprint.reached && plan.fiNumber > 0 ? (
+        {hasInputs && !sprint.reached && plan.fiNumber > 0 ? (
           <dl className="mt-8 grid gap-4 border-t border-white/20 pt-6 sm:grid-cols-3">
             <SprintStat
               label="Nest egg to hit"
@@ -109,7 +107,7 @@ export function SprintBoard({
         ) : null}
       </div>
 
-      {hydrated && hasInputs && !sprint.reached && !sprint.onTrack ? (
+      {hasInputs && !sprint.reached && !sprint.onTrack ? (
         <div className="grid gap-4 lg:grid-cols-3">
           <Lever
             kicker="Or this"
@@ -149,7 +147,7 @@ export function SprintBoard({
         </div>
       ) : null}
 
-      {hydrated && hasInputs && sprint.onTrack && !sprint.reached ? (
+      {hasInputs && sprint.onTrack && !sprint.reached ? (
         <p className="text-sm text-muted-foreground">
           Switch to {sisterWindow} months if you want the tighter date. Savings
           rate {formatPercent(plan.savingsRate)}.

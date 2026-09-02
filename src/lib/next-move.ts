@@ -17,19 +17,9 @@ export type NextMove = {
 export function nextMove(
   plan: IndependencePlan,
   sprint: SprintPlan,
-  finance: FinanceInputs,
-  hydrated: boolean
+  finance: FinanceInputs
 ): NextMove {
   const deadline = formatMonthYear(addMonths(new Date(), finance.targetMonths));
-
-  if (!hydrated) {
-    return {
-      kicker: "Your move",
-      headline: "Loading the ledger…",
-      lines: [],
-      footer: "",
-    };
-  }
 
   if (!plan.hasInputs) {
     return {

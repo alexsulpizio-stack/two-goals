@@ -62,7 +62,7 @@ const fields: {
 ];
 
 export function StewardView() {
-  const { state, setState, hydrated, reset } = useAppState();
+  const { state, setState, reset } = useAppState();
   const plan = useMemo(
     () => independencePlan(state.finance),
     [state.finance]
@@ -187,7 +187,6 @@ export function StewardView() {
         finance={state.finance}
         targetMonths={state.finance.targetMonths}
         hasInputs={plan.hasInputs}
-        hydrated={hydrated}
         onTargetMonths={(months: SprintMonths) =>
           setState((previous) => ({
             ...previous,

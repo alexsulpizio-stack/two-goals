@@ -7,8 +7,7 @@ import { defaultFinance } from "../src/lib/types";
 const empty = nextMove(
   independencePlan(defaultFinance),
   sprintPlan(defaultFinance),
-  defaultFinance,
-  true
+  defaultFinance
 );
 assert.match(empty.headline, /living costs and giving/i);
 
@@ -22,8 +21,7 @@ const bleed = {
 const bleedMove = nextMove(
   independencePlan(bleed),
   sprintPlan(bleed),
-  bleed,
-  true
+  bleed
 );
 assert.match(bleedMove.headline, /empties/i);
 
@@ -37,8 +35,7 @@ const short = {
 const shortMove = nextMove(
   independencePlan(short),
   sprintPlan(short, 12),
-  { ...short, targetMonths: 12 },
-  true
+  { ...short, targetMonths: 12 }
 );
 assert.match(shortMove.kicker, /pick one/i);
 assert.ok(shortMove.lines.length >= 2);
