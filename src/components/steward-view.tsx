@@ -340,24 +340,19 @@ export function StewardView() {
             </div>
 
             <div className="rounded-xl bg-muted/60 p-4 text-sm leading-relaxed text-muted-foreground">
-              {plan.fiNumber > 0 ? (
-                <p>
-                  To fund {formatMoney(plan.annualSpend)} a year — living plus
-                  giving — you need about {formatMoney(plan.fiNumber)} invested.
-                  {plan.reached
-                    ? " You are there. Keep seeking the kingdom."
-                    : sprint.onTrack
-                      ? ` At this pace you arrive inside the ${state.finance.targetMonths}-month window.`
-                      : plan.monthsRemaining === null
-                        ? " Right now savings and returns are not climbing toward that number in time."
-                        : ` At this pace that is ${formatDuration(plan.monthsRemaining)} — outside the window. Use the sprint paths above.`}
-                </p>
-              ) : (
-                <p>
-                  Add living expenses and giving to see the nest egg that would
-                  fund them without a paycheck.
-                </p>
-              )}
+              <p id="fi-assumptions-copy">
+                {plan.fiNumber > 0
+                  ? `To fund ${formatMoney(plan.annualSpend)} a year — living plus giving — you need about ${formatMoney(plan.fiNumber)} invested.${
+                      plan.reached
+                        ? " You are there. Keep seeking the kingdom."
+                        : sprint.onTrack
+                          ? ` At this pace you arrive inside the ${state.finance.targetMonths}-month window.`
+                          : plan.monthsRemaining === null
+                            ? " Right now savings and returns are not climbing toward that number in time."
+                            : ` At this pace that is ${formatDuration(plan.monthsRemaining)} — outside the window. Use the sprint paths above.`
+                    }`
+                  : "Add living expenses and giving to see the nest egg that would fund them without a paycheck."}
+              </p>
             </div>
           </CardContent>
         </Card>

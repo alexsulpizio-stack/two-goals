@@ -497,6 +497,23 @@
       button.classList.toggle("text-white", selected);
       button.classList.toggle("text-muted-foreground", !selected);
     });
+
+    const assumptions = document.getElementById("fi-assumptions-copy");
+    if (assumptions) {
+      if (plan.fiNumber > 0) {
+        const pace = plan.reached
+          ? " You are there. Keep seeking the kingdom."
+          : sprint.onTrack
+            ? ` At this pace you arrive inside the ${finance.targetMonths}-month window.`
+            : plan.monthsRemaining === null
+              ? " Right now savings and returns are not climbing toward that number in time."
+              : ` At this pace that is ${formatDuration(plan.monthsRemaining)} — outside the window. Use the sprint paths above.`;
+        assumptions.textContent = `To fund ${formatMoney(plan.annualSpend)} a year — living plus giving — you need about ${formatMoney(plan.fiNumber)} invested.${pace}`;
+      } else {
+        assumptions.textContent =
+          "Add living expenses and giving to see the nest egg that would fund them without a paycheck.";
+      }
+    }
   }
 
   function snapshotRow(item) {
