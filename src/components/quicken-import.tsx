@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
+import { CategoryKindList } from "@/components/category-kind-list";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/card";
 import { todayKey } from "@/lib/dates";
 import { formatMoney } from "@/lib/finance";
-import { displayKind, nextKind, retotalSummary } from "@/lib/quicken";
+import { nextKind, retotalSummary } from "@/lib/quicken";
 import {
   parseQuickenBytes,
   parseQuickenText,
@@ -202,7 +203,7 @@ export function QuickenImport({
     : [];
 
   return (
-    <Card className="bg-card/80">
+    <Card className="overflow-visible bg-card/80">
       <CardHeader className="border-b">
         <CardDescription>Quicken</CardDescription>
         <CardTitle className="font-heading text-2xl">
@@ -383,31 +384,10 @@ export function QuickenImport({
 
             {visibleCategories.length > 0 ? (
               <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium">
-                  Categories in this window. Click a type to correct it.
-                  Transfers (card payments, account moves) are listed so you can
-                  recast one if it should be living or income.
-                </p>
-                <ul className="divide-y rounded-xl border border-border/80">
-                  {visibleCategories.map((item) => (
-                    <li
-                      key={item.name}
-                      className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-                    >
-                      <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                      <span className="tabular-nums text-muted-foreground">
-                        {formatMoney(Math.abs(item.total))}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => cycleKind(item.name, item.kind)}
-                        className="w-20 rounded-full border border-border px-2 py-0.5 text-xs hover:border-steward hover:text-steward"
-                      >
-                        {displayKind(item.kind)}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <CategoryKindList
+                  categories={visibleCategories}
+                  onCycle={cycleKind}
+                />
                 {summary.categories.length > 12 ? (
                   <button
                     type="button"

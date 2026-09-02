@@ -1,6 +1,6 @@
 import { decodeQuickenBytes, parseQuickenFile, readAsArrayBuffer } from "./parse";
 import { mergeBundles, summarizeQuicken } from "./summarize";
-import type { QuickenBundle, QuickenSummary } from "./types";
+import type { LedgerKind, QuickenBundle, QuickenSummary } from "./types";
 
 export type ImportResult = {
   ok: boolean;
@@ -29,6 +29,7 @@ export type CompactImport = {
   startDate?: string | null;
   endDate?: string | null;
   warnings?: string[];
+  categories?: Array<{ name: string; kind: LedgerKind; total: number }>;
 };
 
 export function compactImport(result: ImportResult): CompactImport {
@@ -55,6 +56,11 @@ export function compactImport(result: ImportResult): CompactImport {
     startDate: summary.startDate,
     endDate: summary.endDate,
     warnings: summary.warnings.slice(0, 4),
+    categories: summary.categories.slice(0, 24).map((item) => ({
+      name: item.name,
+      kind: item.kind,
+      total: item.total,
+    })),
   };
 }
 

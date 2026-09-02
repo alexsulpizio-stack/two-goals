@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -11,15 +12,35 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CategoryKindList } from "@/components/category-kind-list";
 import { todayKey } from "@/lib/dates";
 import { formatMoney } from "@/lib/finance";
-import { defaultState, type AppState } from "@/lib/types";
+import { nextKind } from "@/lib/quicken";
 import type { CompactImport } from "@/lib/quicken/from-form";
+import { defaultState, type AppState, type LedgerKind } from "@/lib/types";
 
 const STORAGE_KEY = "two-goals:v1";
 
 export function ImportResultView({ data }: { data: CompactImport }) {
   const router = useRouter();
+  const [overrides, setOverrides] = useState<Record<string, LedgerKind>>({});
+
+  const rows = useMemo(
+    () =>
+      (data.categories ?? []).map((item) => ({
+        ...item,
+        kind: overrides[item.name] ?? item.kind,
+      })),
+    [data.categories, overrides]
+  );
+
+  const months = Math.max(1, data.monthsCovered ?? 12);
+  const periodIncome = sumKind(rows, "income");
+  const periodExpenses = sumKind(rows, "expense");
+  const periodGiving = sumKind(rows, "giving");
+  const monthlyIncome = roundMoney(periodIncome / months);
+  const monthlyExpenses = roundMoney(periodExpenses / months);
+  const monthlyGiving = roundMoney(periodGiving / months);
 
   function apply() {
     if (!data.ok) return;
@@ -28,10 +49,14 @@ export function ImportResultView({ data }: { data: CompactImport }) {
       ...previous,
       finance: {
         ...previous.finance,
-        monthlyIncome: data.monthlyIncome ?? 0,
-        monthlyExpenses: data.monthlyExpenses ?? 0,
-        monthlyGiving: data.monthlyGiving ?? 0,
+        monthlyIncome,
+        monthlyExpenses,
+        monthlyGiving,
         netWorth: data.investedNetWorth ?? previous.finance.netWorth,
+      },
+      categoryOverrides: {
+        ...previous.categoryOverrides,
+        ...overrides,
       },
       snapshots:
         data.investedNetWorth != null
@@ -85,7 +110,7 @@ export function ImportResultView({ data }: { data: CompactImport }) {
         </p>
       </section>
 
-      <Card className="max-w-3xl">
+      <Card className="max-w-3xl overflow-visible">
         <CardHeader className="border-b">
           <CardDescription>Preview</CardDescription>
           <CardTitle className="font-heading text-2xl">
@@ -96,15 +121,15 @@ export function ImportResultView({ data }: { data: CompactImport }) {
           <dl className="grid gap-3 sm:grid-cols-2">
             <Metric
               label={`Income in span / monthly`}
-              value={`${formatMoney(data.periodIncome ?? 0)} · ${formatMoney(data.monthlyIncome ?? 0)}/mo`}
+              value={`${formatMoney(periodIncome)} · ${formatMoney(monthlyIncome)}/mo`}
             />
             <Metric
               label={`Living in span / monthly`}
-              value={`${formatMoney(data.periodExpenses ?? 0)} · ${formatMoney(data.monthlyExpenses ?? 0)}/mo`}
+              value={`${formatMoney(periodExpenses)} · ${formatMoney(monthlyExpenses)}/mo`}
             />
             <Metric
               label={`Giving in span / monthly`}
-              value={`${formatMoney(data.periodGiving ?? 0)} · ${formatMoney(data.monthlyGiving ?? 0)}/mo`}
+              value={`${formatMoney(periodGiving)} · ${formatMoney(monthlyGiving)}/mo`}
             />
             <Metric
               label="Invested net worth"
@@ -115,6 +140,15 @@ export function ImportResultView({ data }: { data: CompactImport }) {
               }
             />
           </dl>
+          <CategoryKindList
+            categories={rows}
+            onCycle={(name, kind) =>
+              setOverrides((previous) => ({
+                ...previous,
+                [name]: nextKind(kind),
+              }))
+            }
+          />
         </CardContent>
       </Card>
 
@@ -136,6 +170,21 @@ export function ImportResultView({ data }: { data: CompactImport }) {
         </Link>
       </div>
     </div>
+  );
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function sumKind(
+  rows: Array<{ kind: LedgerKind; total: number }>,
+  kind: LedgerKind
+) {
+  return roundMoney(
+    rows
+      .filter((item) => item.kind === kind)
+      .reduce((sum, item) => sum + Math.abs(item.total), 0)
   );
 }
 
