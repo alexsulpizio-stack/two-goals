@@ -20,7 +20,7 @@ Open [http://localhost:43147](http://localhost:43147).
 
 - **Compass** — both goals, the verse of the day, and today’s practices
 - **Walk** — abiding practices and a private prayer journal
-- **Steward** — 6- or 12-month sprint, FI number, net worth snapshots, and the three doors that close the gap
+- **Steward** — 6- or 12-month sprint, FI number, a dated ledger snapshot, and the three doors that close the gap
 
 ```bash
 npm run lint
@@ -36,6 +36,6 @@ Years remaining assume monthly savings keep going and invested assets earn the r
 
 The 6- and 12-month sprint then asks the reverse question: what monthly surplus, lump sum today, or living-cost ceiling would actually hit that FI number inside the window. Cutting living costs is double-powerful — you save more and you need a smaller nest egg.
 
-Record today’s net worth from the ledger whenever you update invested assets. Snapshots stay on that card so you can watch the climb.
+Record today from the ledger whenever you update net worth, income, living costs, or giving. Each snapshot keeps those four numbers together so you can watch the climb.
 
 This is a planning sketch, not advice. Scripture quotations are from the World English Bible (public domain).

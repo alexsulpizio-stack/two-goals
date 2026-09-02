@@ -22,16 +22,21 @@ export type FinanceInputs = {
   targetMonths: SprintMonths;
 };
 
-export type NetWorthSnapshot = {
+export type LedgerSnapshot = {
   date: string;
   netWorth: number;
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  monthlyGiving: number;
 };
+
+export type NetWorthSnapshot = LedgerSnapshot;
 
 export type AppState = {
   practices: Record<string, PracticeDay>;
   prayers: PrayerEntry[];
   finance: FinanceInputs;
-  snapshots: NetWorthSnapshot[];
+  snapshots: LedgerSnapshot[];
 };
 
 export const emptyPractice = (): PracticeDay => ({

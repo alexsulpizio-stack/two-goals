@@ -2,6 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
+import { asLedgerSnapshots } from "@/lib/ledger";
 import {
   defaultState,
   emptyPractice,
@@ -29,7 +30,7 @@ function mergeState(parsed: Partial<AppState>): AppState {
       ...parsed.finance,
       targetMonths: asSprintMonths(parsed.finance?.targetMonths),
     },
-    snapshots: parsed.snapshots ?? defaultState.snapshots,
+    snapshots: asLedgerSnapshots(parsed.snapshots),
   };
 }
 

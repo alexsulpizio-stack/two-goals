@@ -15,6 +15,11 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useAppState } from "@/hooks/use-app-state";
 import { formatShortDate, todayKey } from "@/lib/dates";
+import {
+  LEDGER_FIELDS,
+  monthlySurplus,
+  type LedgerSnapshot,
+} from "@/lib/ledger";
 import { SprintBoard } from "@/components/sprint-plan";
 import {
   formatDuration,
@@ -67,7 +72,7 @@ export function StewardView() {
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [recordNote, setRecordNote] = useState<
-    { kind: "saved"; date: string; netWorth: number } | { kind: "empty" } | null
+    { kind: "saved"; snapshot: LedgerSnapshot } | { kind: "empty" } | null
   >(null);
   const lastRecordAt = useRef(0);
 
@@ -85,6 +90,28 @@ export function StewardView() {
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
+  function fieldFromDom(id: (typeof LEDGER_FIELDS)[number], fallback: number) {
+    if (typeof document === "undefined") {
+      return parseMoney(draft?.[id], fallback);
+    }
+    const input = document.getElementById(id);
+    if (input instanceof HTMLInputElement) {
+      return parseMoney(input.value, fallback);
+    }
+    return parseMoney(draft?.[id], fallback);
+  }
+
+  function ledgerFromDom(): LedgerSnapshot {
+    const date = todayKey();
+    return {
+      date,
+      netWorth: fieldFromDom("netWorth", state.finance.netWorth),
+      monthlyIncome: fieldFromDom("monthlyIncome", state.finance.monthlyIncome),
+      monthlyExpenses: fieldFromDom("monthlyExpenses", state.finance.monthlyExpenses),
+      monthlyGiving: fieldFromDom("monthlyGiving", state.finance.monthlyGiving),
+    };
+  }
+
   function commitNumber(key: keyof FinanceInputs, raw: string) {
     const next = parseMoney(raw, 0);
     setState((previous) => ({
@@ -99,42 +126,41 @@ export function StewardView() {
     });
   }
 
-  function netWorthFromField() {
-    if (typeof document === "undefined") return draft?.netWorth ?? "";
-    const input = document.getElementById("netWorth");
-    return input instanceof HTMLInputElement ? input.value : (draft?.netWorth ?? "");
-  }
-
-  function recordSnapshot(rawNetWorth: string) {
+  function recordSnapshot(snapshot = ledgerFromDom()) {
     const now = Date.now();
     if (now - lastRecordAt.current < 400) return;
     lastRecordAt.current = now;
-    const date = todayKey();
-    const trimmed = rawNetWorth.trim();
-    if (trimmed === "" && state.finance.netWorth === 0) {
+    const empty =
+      snapshot.netWorth === 0 &&
+      snapshot.monthlyIncome === 0 &&
+      snapshot.monthlyExpenses === 0 &&
+      snapshot.monthlyGiving === 0;
+    if (empty) {
       setRecordNote({ kind: "empty" });
       return;
     }
-    const netWorth = parseMoney(trimmed, state.finance.netWorth);
-    setRecordNote({ kind: "saved", date, netWorth });
-    setDraft((previous) => {
-      if (!previous) return previous;
-      const copy = { ...previous };
-      delete copy.netWorth;
-      return Object.keys(copy).length ? copy : null;
-    });
+    setRecordNote({ kind: "saved", snapshot });
+    setDraft(null);
     setState((previous) => ({
       ...previous,
-      finance: { ...previous.finance, netWorth },
+      finance: {
+        ...previous.finance,
+        netWorth: snapshot.netWorth,
+        monthlyIncome: snapshot.monthlyIncome,
+        monthlyExpenses: snapshot.monthlyExpenses,
+        monthlyGiving: snapshot.monthlyGiving,
+      },
       snapshots: [
-        { date, netWorth },
-        ...previous.snapshots.filter((item) => item.date !== date),
+        snapshot,
+        ...previous.snapshots.filter((item) => item.date !== snapshot.date),
       ],
     }));
   }
 
   const insight = stewardshipInsight(plan, sprint, hydrated);
   const snapshots = state.snapshots;
+  const latest = recordNote?.kind === "saved" ? recordNote.snapshot : snapshots[0];
+  const surplus = monthlySurplus(state.finance);
 
   return (
     <div className="flex flex-col gap-10">
@@ -204,69 +230,77 @@ export function StewardView() {
                     onBlur={(event) =>
                       commitNumber(field.key, event.target.value)
                     }
-                    onKeyDown={
-                      field.key === "netWorth"
-                        ? (event) => {
-                            if (event.key !== "Enter") return;
-                            event.preventDefault();
-                            recordSnapshot(event.currentTarget.value);
-                          }
-                        : undefined
-                    }
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      recordSnapshot();
+                    }}
                   />
                 </div>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {field.hint}
                 </p>
-                {field.key === "netWorth" ? (
-                  <div className="flex flex-col gap-3 pt-1">
-                    <button
-                      type="button"
-                      data-record-net-worth=""
-                      className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-steward px-4 text-sm font-medium text-white hover:bg-steward/90"
-                      onPointerDown={() => recordSnapshot(netWorthFromField())}
-                      onClick={() => recordSnapshot(netWorthFromField())}
-                    >
-                      Record today’s net worth
-                    </button>
-                    <p
-                      id="net-worth-status"
-                      className="rounded-xl border border-steward/30 bg-steward/10 px-4 py-3 text-sm"
-                      role="status"
-                      hidden={recordNote == null && snapshots.length === 0}
-                    >
-                      {recordNote?.kind === "empty"
-                        ? "Type invested net worth first, then record it."
-                        : recordNote?.kind === "saved"
-                          ? `Recorded ${formatMoney(recordNote.netWorth)} for ${formatShortDate(recordNote.date)}.`
-                          : snapshots[0]
-                            ? `Recorded ${formatMoney(snapshots[0].netWorth)} for ${formatShortDate(snapshots[0].date)}.`
-                            : null}
-                    </p>
-                    <ul id="net-worth-snapshots" className="flex flex-col gap-2">
-                      {snapshots.slice(0, 8).map((item) => (
-                        <li
-                          key={item.date}
-                          className="flex items-baseline justify-between text-sm"
-                        >
-                          <span className="text-muted-foreground">
-                            {formatShortDate(item.date)}
-                          </span>
-                          <span className="tabular-nums">
-                            {formatMoney(item.netWorth)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                    {snapshots.length === 0 && recordNote?.kind !== "saved" ? (
-                      <p className="text-sm text-muted-foreground">
-                        Today’s snapshot appears here so you can watch the climb.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
               </div>
             ))}
+
+            <div className="flex flex-col gap-3 border-t pt-5">
+              <p id="ledger-surplus" className="text-sm">
+                {state.finance.monthlyIncome > 0 ||
+                state.finance.monthlyExpenses > 0 ||
+                state.finance.monthlyGiving > 0
+                  ? surplus >= 0
+                    ? `This month’s surplus: ${formatMoney(surplus)} after living and giving.`
+                    : `This month the barn is emptying by ${formatMoney(Math.abs(surplus))}.`
+                  : "Income, living, and giving set the monthly surplus the sprint uses."}
+              </p>
+              <button
+                type="button"
+                data-record-ledger=""
+                className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-steward px-4 text-sm font-medium text-white hover:bg-steward/90"
+                onPointerDown={() => recordSnapshot()}
+                onClick={() => recordSnapshot()}
+              >
+                Record today
+              </button>
+              <p
+                id="ledger-status"
+                className="rounded-xl border border-steward/30 bg-steward/10 px-4 py-3 text-sm"
+                role="status"
+                hidden={recordNote == null && snapshots.length === 0}
+              >
+                {recordNote?.kind === "empty"
+                  ? "Type net worth, income, living, or giving first, then record today."
+                  : latest
+                    ? `Recorded ${formatShortDate(latest.date)}: ${formatMoney(latest.netWorth)} net, ${formatMoney(latest.monthlyIncome)} income, ${formatMoney(latest.monthlyExpenses)} living, ${formatMoney(latest.monthlyGiving)} giving.`
+                    : null}
+              </p>
+              <ul id="ledger-snapshots" className="flex flex-col">
+                {snapshots.slice(0, 8).map((item) => (
+                  <li
+                    key={item.date}
+                    className="flex flex-col gap-1 border-b border-border/60 py-2 last:border-0"
+                  >
+                    <span className="text-muted-foreground">
+                      {formatShortDate(item.date)}
+                    </span>
+                    <span className="tabular-nums">
+                      {formatMoney(item.netWorth)} net
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {formatMoney(item.monthlyIncome)} in ·{" "}
+                      {formatMoney(item.monthlyExpenses)} living ·{" "}
+                      {formatMoney(item.monthlyGiving)} giving
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {snapshots.length === 0 && recordNote?.kind !== "saved" ? (
+                <p className="text-sm text-muted-foreground">
+                  Record today to keep net worth, income, living, and giving
+                  together, so you can watch the climb.
+                </p>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
 
