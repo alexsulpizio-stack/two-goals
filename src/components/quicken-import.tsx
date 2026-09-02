@@ -103,8 +103,13 @@ export function QuickenImport({
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const wantsSample =
       submitter instanceof HTMLButtonElement && submitter.name === "sample";
-    const file = fileRef.current?.files?.[0];
-    const paste = pasteRef.current?.value?.trim() ?? "";
+    const formData = new FormData(event.currentTarget);
+    const uploaded = formData.get("quicken");
+    const file =
+      uploaded instanceof File && uploaded.size > 0
+        ? uploaded
+        : fileRef.current?.files?.[0];
+    const paste = String(formData.get("paste") ?? "").trim();
 
     if (wantsSample) {
       event.preventDefault();
@@ -128,7 +133,7 @@ export function QuickenImport({
       );
       return;
     }
-    setNote("Posting the file to Steward…");
+    setNote("Sending the file to Steward…");
   }
 
   async function loadSample() {

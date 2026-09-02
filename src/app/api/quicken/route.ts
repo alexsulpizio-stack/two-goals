@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 
-function backToSteward(request: Request) {
-  return NextResponse.redirect(new URL("/steward", request.url), 303);
+function backToSteward() {
+  return new NextResponse(null, {
+    status: 303,
+    headers: { Location: "/steward" },
+  });
 }
 
-/** Old Read file POSTs used to dump JSON or QIF text. Send them home. */
-export function GET(request: Request) {
-  return backToSteward(request);
+/** Leftover POSTs used to dump JSON. Send people back to Steward. */
+export function GET() {
+  return backToSteward();
 }
 
 export async function POST(request: Request) {
   await request.arrayBuffer().catch(() => undefined);
-  return backToSteward(request);
+  return backToSteward();
 }
