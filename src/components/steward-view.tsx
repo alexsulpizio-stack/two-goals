@@ -22,7 +22,6 @@ import {
   upsertTodaySnapshot,
   type LedgerSnapshot,
 } from "@/lib/ledger";
-import { LedgerWhy } from "@/components/ledger-why";
 import { SprintBoard } from "@/components/sprint-plan";
 import {
   formatDuration,
@@ -176,16 +175,16 @@ export function StewardView() {
           Independent in the next 6 to 12 months.
         </h1>
         <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
-          The point is not a yacht. The point is freedom to follow — to give,
-          to rest, to change work without fear. The ledger exists to tell you
-          whether this month’s surplus, a lump sum, or a smaller life would
-          actually arrive on time.
+          This page does not earn the money. It names the only three sizes that
+          hit the deadline: more invested each month, a lump sum now, or a
+          smaller living cost. Giving stays in the target. Pick one and do it.
         </p>
       </section>
 
       <SprintBoard
         plan={plan}
         sprint={sprint}
+        finance={state.finance}
         targetMonths={state.finance.targetMonths}
         hasInputs={plan.hasInputs}
         hydrated={hydrated}
@@ -195,14 +194,6 @@ export function StewardView() {
             finance: { ...previous.finance, targetMonths: months },
           }))
         }
-      />
-
-      <LedgerWhy
-        plan={plan}
-        sprint={sprint}
-        finance={state.finance}
-        snapshots={snapshots}
-        hydrated={hydrated}
       />
 
       <section className="grid gap-4 lg:grid-cols-2">

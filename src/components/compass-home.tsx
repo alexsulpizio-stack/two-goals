@@ -14,7 +14,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAppState } from "@/hooks/use-app-state";
 import { addMonths, formatLongDate, formatMonthYear, lastNDates, todayKey } from "@/lib/dates";
-import { formatDuration, formatPercent, independencePlan, sprintPlan } from "@/lib/finance";
+import { independencePlan, sprintPlan } from "@/lib/finance";
+import { nextMove } from "@/lib/next-move";
 import { verseOfTheDay } from "@/lib/scripture";
 import { emptyPractice, type PracticeKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ export function CompassHome() {
   const day = state.practices[today] ?? emptyPractice();
   const plan = independencePlan(state.finance);
   const sprint = sprintPlan(state.finance, state.finance.targetMonths);
+  const move = nextMove(plan, sprint, state.finance, hydrated);
   const deadline = formatMonthYear(addMonths(new Date(), state.finance.targetMonths));
   const week = lastNDates(7);
   const wordDays = week.filter((date) => state.practices[date]?.word).length;
@@ -93,13 +95,7 @@ export function CompassHome() {
           <CardHeader className="border-b">
             <CardDescription>Independence</CardDescription>
             <CardTitle className="font-heading text-2xl">
-              {hydrated && plan.hasInputs
-                ? plan.reached
-                  ? "The money question is settled"
-                  : sprint.onTrack
-                    ? `On pace for ${deadline}`
-                    : `Off pace for ${deadline}`
-                : "The 6–12 month sprint"}
+              {hydrated && plan.hasInputs ? move.headline : "No finish line yet"}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-5 pt-5">
@@ -117,28 +113,19 @@ export function CompassHome() {
             <div className="flex flex-col gap-2 text-sm">
               {hydrated && plan.hasInputs ? (
                 <>
-                  <p>
-                    This path{" "}
-                    <span className="font-medium text-foreground">
-                      {formatDuration(plan.monthsRemaining)}
-                    </span>
-                  </p>
-                  <p>
-                    Savings rate{" "}
-                    <span className="font-medium text-foreground">
-                      {formatPercent(plan.savingsRate)}
-                    </span>
-                  </p>
+                  {move.lines[0] ? <p>{move.lines[0]}</p> : null}
                   <Link
                     href="/steward"
                     className="text-sm font-medium underline-offset-4 hover:underline"
                   >
-                    Open the sprint
+                    Do this on Steward
                   </Link>
                 </>
               ) : (
                 <p className="text-muted-foreground">
-                  Enter income, giving, and net worth to see what 6–12 months requires.
+                  Enter living and giving on Steward. Then it will name the one
+                  monthly shortfall, lump sum, or living ceiling that hits{" "}
+                  {deadline}.
                 </p>
               )}
             </div>
