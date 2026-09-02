@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -66,10 +66,10 @@ export function StewardView() {
   );
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [justRecorded, setJustRecorded] = useState<{
-    date: string;
-    netWorth: number;
-  } | null>(null);
+  const [recordNote, setRecordNote] = useState<
+    { kind: "saved"; date: string; netWorth: number } | { kind: "empty" } | null
+  >(null);
+  const lastRecordAt = useRef(0);
 
   function financeValue(key: keyof FinanceInputs): string {
     if (draft && key in draft) return draft[key] ?? "";
@@ -99,9 +99,30 @@ export function StewardView() {
     });
   }
 
-  function recordSnapshot() {
+  function netWorthFromField() {
+    if (typeof document === "undefined") return draft?.netWorth ?? "";
+    const input = document.getElementById("netWorth");
+    return input instanceof HTMLInputElement ? input.value : (draft?.netWorth ?? "");
+  }
+
+  function recordSnapshot(rawNetWorth: string) {
+    const now = Date.now();
+    if (now - lastRecordAt.current < 400) return;
+    lastRecordAt.current = now;
     const date = todayKey();
-    const netWorth = parseMoney(draft?.netWorth, state.finance.netWorth);
+    const trimmed = rawNetWorth.trim();
+    if (trimmed === "" && state.finance.netWorth === 0) {
+      setRecordNote({ kind: "empty" });
+      return;
+    }
+    const netWorth = parseMoney(trimmed, state.finance.netWorth);
+    setRecordNote({ kind: "saved", date, netWorth });
+    setDraft((previous) => {
+      if (!previous) return previous;
+      const copy = { ...previous };
+      delete copy.netWorth;
+      return Object.keys(copy).length ? copy : null;
+    });
     setState((previous) => ({
       ...previous,
       finance: { ...previous.finance, netWorth },
@@ -110,17 +131,10 @@ export function StewardView() {
         ...previous.snapshots.filter((item) => item.date !== date),
       ],
     }));
-    setDraft((previous) => {
-      if (!previous || !("netWorth" in previous)) return previous;
-      const copy = { ...previous };
-      delete copy.netWorth;
-      return Object.keys(copy).length ? copy : null;
-    });
-    setJustRecorded({ date, netWorth });
   }
 
   const insight = stewardshipInsight(plan, sprint, hydrated);
-  const snapshots = hydrated ? state.snapshots : [];
+  const snapshots = state.snapshots;
 
   return (
     <div className="flex flex-col gap-10">
@@ -175,10 +189,12 @@ export function StewardView() {
                   </span>
                   <Input
                     id={field.key}
+                    name={field.key}
                     inputMode="decimal"
                     className="pl-6"
                     placeholder="0"
-                    value={hydrated ? financeValue(field.key) : ""}
+                    value={financeValue(field.key)}
+                    suppressHydrationWarning
                     onChange={(event) =>
                       setDraft((previous) => ({
                         ...(previous ?? {}),
@@ -188,53 +204,72 @@ export function StewardView() {
                     onBlur={(event) =>
                       commitNumber(field.key, event.target.value)
                     }
+                    onKeyDown={
+                      field.key === "netWorth"
+                        ? (event) => {
+                            if (event.key !== "Enter") return;
+                            event.preventDefault();
+                            recordSnapshot(event.currentTarget.value);
+                          }
+                        : undefined
+                    }
                   />
                 </div>
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {field.hint}
                 </p>
+                {field.key === "netWorth" ? (
+                  <div className="flex flex-col gap-3 pt-1">
+                    <button
+                      type="button"
+                      className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-steward px-4 text-sm font-medium text-white hover:bg-steward/90"
+                      onPointerDown={() => recordSnapshot(netWorthFromField())}
+                      onClick={() => recordSnapshot(netWorthFromField())}
+                    >
+                      Record today’s net worth
+                    </button>
+                    {recordNote?.kind === "empty" ? (
+                      <p
+                        className="rounded-xl border border-border bg-muted/60 px-4 py-3 text-sm"
+                        role="status"
+                      >
+                        Type invested net worth first, then record it.
+                      </p>
+                    ) : null}
+                    {recordNote?.kind === "saved" ? (
+                      <p
+                        className="rounded-xl border border-steward/30 bg-steward/10 px-4 py-3 text-sm"
+                        role="status"
+                      >
+                        Recorded {formatMoney(recordNote.netWorth)} for{" "}
+                        {formatShortDate(recordNote.date)}.
+                      </p>
+                    ) : null}
+                    {snapshots.length > 0 ? (
+                      <ul className="flex flex-col gap-2">
+                        {snapshots.slice(0, 8).map((item) => (
+                          <li
+                            key={item.date}
+                            className="flex items-baseline justify-between text-sm"
+                          >
+                            <span className="text-muted-foreground">
+                              {formatShortDate(item.date)}
+                            </span>
+                            <span className="tabular-nums">
+                              {formatMoney(item.netWorth)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : recordNote?.kind !== "saved" ? (
+                      <p className="text-sm text-muted-foreground">
+                        Today’s snapshot appears here so you can watch the climb.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ))}
-
-            <div className="flex flex-col gap-3 border-t pt-5">
-              <Button
-                type="button"
-                variant="outline"
-                className="self-start"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={recordSnapshot}
-              >
-                Record today’s net worth
-              </Button>
-              {justRecorded ? (
-                <p className="text-sm text-steward">
-                  Recorded {formatMoney(justRecorded.netWorth)} for{" "}
-                  {formatShortDate(justRecorded.date)}.
-                </p>
-              ) : null}
-              {snapshots.length > 0 ? (
-                <ul className="flex flex-col gap-2">
-                  {snapshots.slice(0, 8).map((item) => (
-                    <li
-                      key={item.date}
-                      className="flex items-baseline justify-between text-sm"
-                    >
-                      <span className="text-muted-foreground">
-                        {formatShortDate(item.date)}
-                      </span>
-                      <span className="tabular-nums">
-                        {formatMoney(item.netWorth)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Type invested net worth above, then record it. Today’s
-                  snapshot appears here so you can watch the climb.
-                </p>
-              )}
-            </div>
           </CardContent>
         </Card>
 
@@ -335,7 +370,7 @@ export function StewardView() {
               onClick={() => {
                 reset();
                 setConfirmReset(false);
-                setJustRecorded(null);
+                setRecordNote(null);
               }}
             >
               Clear everything

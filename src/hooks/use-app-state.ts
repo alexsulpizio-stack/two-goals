@@ -61,9 +61,17 @@ function getServerSnapshot() {
   return defaultState;
 }
 
+function persist(next: AppState) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Private mode or a sandboxed preview can block storage. Keep working in memory.
+  }
+}
+
 function emit(next: AppState) {
   current = next;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  persist(next);
   listeners.forEach((listener) => listener());
 }
 
