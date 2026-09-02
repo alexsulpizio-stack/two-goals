@@ -13,18 +13,19 @@ export type ImportResult = {
   };
 };
 
-export async function parseQuickenFormData(
-  formData: FormData
-): Promise<ImportResult> {
+export async function parseQuickenSources(input: {
+  files?: Array<File | null | undefined>;
+  paste?: string;
+}): Promise<ImportResult> {
   const bundles: QuickenBundle[] = [];
 
-  for (const value of formData.getAll("quicken")) {
-    if (!(value instanceof File) || value.size === 0) continue;
-    const text = decodeQuickenBytes(await value.arrayBuffer());
-    bundles.push(parseQuickenFile(value.name, text));
+  for (const file of input.files ?? []) {
+    if (!file || file.size === 0) continue;
+    const text = decodeQuickenBytes(await file.arrayBuffer());
+    bundles.push(parseQuickenFile(file.name, text));
   }
 
-  const pasted = String(formData.get("paste") ?? "").trim();
+  const pasted = input.paste?.trim() ?? "";
   if (pasted) {
     bundles.push(parseQuickenFile("pasted.qif", pasted));
   }
@@ -33,7 +34,7 @@ export async function parseQuickenFormData(
     return {
       ok: false,
       error:
-        "No file arrived. Choose the .qif, then click Read file. You should stay on Steward and see totals, not the file text.",
+        "No file is chosen. Pick the .qif first — the name should stay visible — then click Read file.",
     };
   }
 
@@ -57,4 +58,13 @@ export async function parseQuickenFormData(
       12: summarizeQuicken(merged, 12),
     },
   };
+}
+
+export async function parseQuickenFormData(
+  formData: FormData
+): Promise<ImportResult> {
+  return parseQuickenSources({
+    files: formData.getAll("quicken").filter((value): value is File => value instanceof File),
+    paste: String(formData.get("paste") ?? ""),
+  });
 }

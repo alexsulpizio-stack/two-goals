@@ -5,7 +5,10 @@ import { fileURLToPath } from "node:url";
 
 import { classifyCategory } from "../src/lib/quicken/classify";
 import { parseCsvFile } from "../src/lib/quicken/csv";
-import { parseQuickenFormData } from "../src/lib/quicken/from-form";
+import {
+  parseQuickenFormData,
+  parseQuickenSources,
+} from "../src/lib/quicken/from-form";
 import { parseAmount, parseDate } from "../src/lib/quicken/money";
 import { decodeQuickenBytes, parseQuickenFile } from "../src/lib/quicken/parse";
 import { parseQifFile } from "../src/lib/quicken/qif";
@@ -140,5 +143,18 @@ assert.equal(fromForm.fileName, "pasted.qif");
 
 const emptyForm = await parseQuickenFormData(new FormData());
 assert.equal(emptyForm.ok, false);
+
+const named = await parseQuickenSources({
+  files: [
+    new File(
+      [readFileSync(join(here, "fixtures/sample.qif"))],
+      "2025data 11-18-2025.QIF",
+      { type: "text/plain" }
+    ),
+  ],
+});
+assert.equal(named.ok, true);
+assert.equal(named.fileName, "2025data 11-18-2025.QIF");
+assert.equal(named.transactionCount, 7);
 
 console.log("quicken tests passed");

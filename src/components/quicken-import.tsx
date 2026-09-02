@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +14,7 @@ import { todayKey } from "@/lib/dates";
 import { formatMoney } from "@/lib/finance";
 import { displayKind, nextKind, retotalSummary } from "@/lib/quicken";
 import {
-  parseQuickenFormData,
+  parseQuickenSources,
   type ImportResult,
 } from "@/lib/quicken/from-form";
 import type { WindowMonths } from "@/lib/quicken";
@@ -30,6 +30,13 @@ export function QuickenImport({
   state: AppState;
   setState: (updater: (previous: AppState) => AppState) => void;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const pasteRef = useRef<HTMLTextAreaElement>(null);
+  const heldFile = useRef<File | null>(null);
+
+  const [chosen, setChosen] = useState<{ name: string; size: number } | null>(
+    null
+  );
   const [payload, setPayload] = useState<ImportResult | null>(null);
   const [pending, setPending] = useState(false);
   const [windowMonths, setWindowMonths] = useState<WindowMonths>(12);
@@ -45,15 +52,39 @@ export function QuickenImport({
     return retotalSummary(rawSummary, state.categoryOverrides);
   }, [rawSummary, state.categoryOverrides]);
 
-  async function onReadFile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    event.stopPropagation();
+  function holdFile(file: File | null | undefined) {
+    if (!file || file.size === 0) return;
+    heldFile.current = file;
+    setChosen({ name: file.name, size: file.size });
+  }
+
+  function onPick(list: FileList | null) {
+    holdFile(list?.[0]);
+  }
+
+  async function readFile() {
+    const live = fileRef.current?.files?.[0];
+    holdFile(live);
+    const file =
+      live && live.size > 0 ? live : heldFile.current;
+    const paste = pasteRef.current?.value ?? "";
+
+    if ((!file || file.size === 0) && !paste.trim()) {
+      setPayload({
+        ok: false,
+        error:
+          "No file is chosen. Pick the .qif first — the name should stay visible — then click Read file.",
+      });
+      return;
+    }
+
     setPending(true);
     setApplied(false);
     try {
-      const result = await parseQuickenFormData(
-        new FormData(event.currentTarget)
-      );
+      const result = await parseQuickenSources({
+        files: file ? [file] : [],
+        paste,
+      });
       setPayload(result);
     } catch {
       setPayload({
@@ -112,12 +143,14 @@ export function QuickenImport({
     : [];
 
   const status = pending
-    ? "Reading your export on this page. You should not leave Steward."
+    ? `Reading ${chosen?.name ?? "the file"} on this page…`
     : payload?.ok
-      ? `Read ${payload.fileName}: ${payload.transactionCount} transactions. Totals are below — not the raw file.`
+      ? `Read ${payload.fileName}: ${payload.transactionCount} transactions. Totals are below.`
       : payload?.error
         ? payload.error
-        : "Choose the file, then click Read file. Steward will show monthly totals, not the QIF text.";
+        : chosen
+          ? `${chosen.name} is ready. Click Read file.`
+          : "Choose the file, then click Read file. The filename should stay visible.";
 
   return (
     <Card className="bg-card/80">
@@ -129,27 +162,34 @@ export function QuickenImport({
       </CardHeader>
       <CardContent className="flex flex-col gap-5 pt-5">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Choose your .qif, then press Read file. Stay here. You should see
-          income, living, and giving — never a page of raw export text. If that
-          dump still appears, use Back and refresh this page once.
+          Choose your .qif. The filename stays here. Then press Read file — you
+          should see monthly totals, not a blank picker and not the raw export.
         </p>
 
-        <form
-          className="flex flex-col gap-4 rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-6"
-          onSubmit={onReadFile}
-        >
+        <div className="flex flex-col gap-4 rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-6">
           <label className="flex flex-col gap-2 text-sm font-medium">
             File
             <input
+              ref={fileRef}
               type="file"
               name="quicken"
-              accept=".qif,.csv,.txt,.tsv,.QIF,.CSV,text/plain"
+              accept=".qif,.csv,.txt,.tsv,.QIF,.CSV"
               className="block w-full cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+              onChange={(event) => onPick(event.target.files)}
+              onInput={(event) =>
+                onPick((event.target as HTMLInputElement).files)
+              }
             />
           </label>
+          <p className="text-sm" data-testid="chosen-file">
+            {chosen
+              ? `Chosen: ${chosen.name} · ${formatBytes(chosen.size)}`
+              : "No file chosen yet."}
+          </p>
           <button
-            type="submit"
+            type="button"
             disabled={pending}
+            onClick={() => void readFile()}
             className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-60"
           >
             {pending ? "Reading…" : "Read file"}
@@ -176,14 +216,14 @@ export function QuickenImport({
             <label className="flex flex-col gap-2 text-sm font-medium">
               Paste
               <textarea
-                name="paste"
+                ref={pasteRef}
                 rows={5}
                 className="w-full rounded-lg border border-input bg-background px-2.5 py-2 font-mono text-xs"
                 placeholder={"!Type:Bank\nD3/15'26\nT-52.10\nPStore\nLGroceries\n^"}
               />
             </label>
           ) : null}
-        </form>
+        </div>
 
         {hydrated && state.lastQuicken && !payload?.ok ? (
           <p className="text-sm text-muted-foreground">
@@ -298,6 +338,12 @@ export function QuickenImport({
       </CardContent>
     </Card>
   );
+}
+
+function formatBytes(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
