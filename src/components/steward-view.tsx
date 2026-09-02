@@ -201,10 +201,8 @@ export function StewardView() {
                 type="button"
                 variant="outline"
                 className="self-start"
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  recordSnapshot();
-                }}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={recordSnapshot}
               >
                 Record today’s net worth
               </Button>
