@@ -176,11 +176,6 @@
     );
   }
 
-  function incomeFocused() {
-    const el = document.activeElement;
-    return el instanceof HTMLElement && Boolean(el.closest("#income-sources"));
-  }
-
   function isIncomeInput(input) {
     return input.hasAttribute("data-income-name") || input.hasAttribute("data-income-amount");
   }
@@ -242,11 +237,33 @@
     const list = document.getElementById("income-sources");
     if (!list) return;
     const next = sources.length > 0 ? sources : [{ id: "income-1", name: "", monthly: 0 }];
-    if (incomeFocused()) {
+    const active = document.activeElement;
+    const activeRow = active instanceof HTMLElement ? active.closest("[data-income-source]") : null;
+    const activeId = activeRow?.getAttribute("data-income-id") || "";
+    const keepName = active instanceof HTMLInputElement && active.hasAttribute("data-income-name");
+    const keepAmount = active instanceof HTMLInputElement && active.hasAttribute("data-income-amount");
+    const keepValue = active instanceof HTMLInputElement ? active.value : "";
+    const current = readIncomeSources();
+    const same =
+      current.length === next.length &&
+      current.every((source, index) => source.id === next[index]?.id);
+
+    if (!same) {
+      list.innerHTML = next.map((source, index) => incomeRowHtml(source, index)).join("");
+      if (activeId) {
+        const row = list.querySelector(`[data-income-id="${CSS.escape(activeId)}"]`);
+        const input = row?.querySelector(keepName ? "[data-income-name]" : keepAmount ? "[data-income-amount]" : "input");
+        if (input instanceof HTMLInputElement) {
+          input.value = keepValue;
+          input.focus();
+          input.selectionStart = input.selectionEnd = input.value.length;
+        }
+      }
+    } else {
       const rows = list.querySelectorAll("[data-income-source]");
-      rows.forEach((row, index) => {
-        const source = next[index];
-        if (!source) return;
+      next.forEach((source, index) => {
+        const row = rows[index];
+        if (!row) return;
         const nameInput = row.querySelector("[data-income-name]");
         const amountInput = row.querySelector("[data-income-amount]");
         if (nameInput instanceof HTMLInputElement && document.activeElement !== nameInput) {
@@ -256,34 +273,11 @@
           amountInput.value = source.monthly ? String(source.monthly) : "";
         }
       });
-      paintIncomeMeta(next);
-      return;
-    }
-    const current = readIncomeSources();
-    const same =
-      current.length === next.length &&
-      current.every((source, index) => source.id === next[index]?.id);
-    if (same) {
-      const rows = list.querySelectorAll("[data-income-source]");
-      next.forEach((source, index) => {
-        const row = rows[index];
-        if (!row) return;
-        const nameInput = row.querySelector("[data-income-name]");
-        const amountInput = row.querySelector("[data-income-amount]");
-        if (nameInput instanceof HTMLInputElement) nameInput.value = source.name || "";
-        if (amountInput instanceof HTMLInputElement) {
-          amountInput.value = source.monthly ? String(source.monthly) : "";
-        }
-      });
-    } else {
-      list.innerHTML = next.map((source, index) => incomeRowHtml(source, index)).join("");
     }
     paintIncomeMeta(next);
   }
 
-  function addIncome() {
-    const sources = readIncomeSources();
-    sources.push({ id: newIncomeId(), name: "", monthly: 0 });
+  function persistSources(sources) {
     const state = readState();
     state.finance = {
       ...defaultState().finance,
@@ -292,6 +286,13 @@
       monthlyIncome: totalIncome(sources),
     };
     writeState(state);
+    return state;
+  }
+
+  function addIncome() {
+    const sources = readIncomeSources();
+    sources.push({ id: newIncomeId(), name: "", monthly: 0 });
+    persistSources(sources);
     paintIncomeRows(sources);
     paintMove();
     window.dispatchEvent(new Event("two-goals-external"));
@@ -308,14 +309,7 @@
     } else {
       sources = sources.filter((source) => source.id !== id);
     }
-    const state = readState();
-    state.finance = {
-      ...defaultState().finance,
-      ...state.finance,
-      incomeSources: sources,
-      monthlyIncome: totalIncome(sources),
-    };
-    writeState(state);
+    persistSources(sources);
     paintIncomeRows(sources);
     updateSurplus(readLedger());
     paintMove();
