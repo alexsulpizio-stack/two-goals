@@ -33,22 +33,36 @@ function mergeState(parsed: Partial<AppState>): AppState {
   };
 }
 
-function load() {
-  if (loaded || typeof window === "undefined") return;
+function reload() {
+  if (typeof window === "undefined") return;
   loaded = true;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) current = mergeState(JSON.parse(raw) as Partial<AppState>);
+    current = raw
+      ? mergeState(JSON.parse(raw) as Partial<AppState>)
+      : defaultState;
   } catch {
     window.localStorage.removeItem(STORAGE_KEY);
+    current = defaultState;
   }
+}
+
+function load() {
+  if (loaded || typeof window === "undefined") return;
+  reload();
 }
 
 function subscribe(listener: () => void) {
   load();
   listeners.add(listener);
+  const onExternal = () => {
+    reload();
+    listener();
+  };
+  window.addEventListener("two-goals-external", onExternal);
   return () => {
     listeners.delete(listener);
+    window.removeEventListener("two-goals-external", onExternal);
   };
 }
 

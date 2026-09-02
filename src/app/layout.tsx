@@ -33,6 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {children}
         </main>
         <SiteFooter />
+        <script src="/record-net-worth.js" defer />
       </body>
     </html>
   );

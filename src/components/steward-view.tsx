@@ -222,46 +222,43 @@ export function StewardView() {
                   <div className="flex flex-col gap-3 pt-1">
                     <button
                       type="button"
+                      data-record-net-worth=""
                       className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-steward px-4 text-sm font-medium text-white hover:bg-steward/90"
                       onPointerDown={() => recordSnapshot(netWorthFromField())}
                       onClick={() => recordSnapshot(netWorthFromField())}
                     >
                       Record today’s net worth
                     </button>
-                    {recordNote?.kind === "empty" ? (
-                      <p
-                        className="rounded-xl border border-border bg-muted/60 px-4 py-3 text-sm"
-                        role="status"
-                      >
-                        Type invested net worth first, then record it.
-                      </p>
-                    ) : null}
-                    {recordNote?.kind === "saved" ? (
-                      <p
-                        className="rounded-xl border border-steward/30 bg-steward/10 px-4 py-3 text-sm"
-                        role="status"
-                      >
-                        Recorded {formatMoney(recordNote.netWorth)} for{" "}
-                        {formatShortDate(recordNote.date)}.
-                      </p>
-                    ) : null}
-                    {snapshots.length > 0 ? (
-                      <ul className="flex flex-col gap-2">
-                        {snapshots.slice(0, 8).map((item) => (
-                          <li
-                            key={item.date}
-                            className="flex items-baseline justify-between text-sm"
-                          >
-                            <span className="text-muted-foreground">
-                              {formatShortDate(item.date)}
-                            </span>
-                            <span className="tabular-nums">
-                              {formatMoney(item.netWorth)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : recordNote?.kind !== "saved" ? (
+                    <p
+                      id="net-worth-status"
+                      className="rounded-xl border border-steward/30 bg-steward/10 px-4 py-3 text-sm"
+                      role="status"
+                      hidden={recordNote == null && snapshots.length === 0}
+                    >
+                      {recordNote?.kind === "empty"
+                        ? "Type invested net worth first, then record it."
+                        : recordNote?.kind === "saved"
+                          ? `Recorded ${formatMoney(recordNote.netWorth)} for ${formatShortDate(recordNote.date)}.`
+                          : snapshots[0]
+                            ? `Recorded ${formatMoney(snapshots[0].netWorth)} for ${formatShortDate(snapshots[0].date)}.`
+                            : null}
+                    </p>
+                    <ul id="net-worth-snapshots" className="flex flex-col gap-2">
+                      {snapshots.slice(0, 8).map((item) => (
+                        <li
+                          key={item.date}
+                          className="flex items-baseline justify-between text-sm"
+                        >
+                          <span className="text-muted-foreground">
+                            {formatShortDate(item.date)}
+                          </span>
+                          <span className="tabular-nums">
+                            {formatMoney(item.netWorth)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {snapshots.length === 0 && recordNote?.kind !== "saved" ? (
                       <p className="text-sm text-muted-foreground">
                         Today’s snapshot appears here so you can watch the climb.
                       </p>
