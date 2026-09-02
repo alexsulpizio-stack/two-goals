@@ -13,6 +13,43 @@ export type ImportResult = {
   };
 };
 
+export type CompactImport = {
+  ok: boolean;
+  error?: string;
+  fileName?: string;
+  transactionCount?: number;
+  monthlyIncome?: number;
+  monthlyExpenses?: number;
+  monthlyGiving?: number;
+  investedNetWorth?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  warnings?: string[];
+};
+
+export function compactImport(result: ImportResult): CompactImport {
+  if (!result.ok || !result.byWindow) {
+    return {
+      ok: false,
+      error: result.error,
+      fileName: result.fileName,
+    };
+  }
+  const summary = result.byWindow[12];
+  return {
+    ok: true,
+    fileName: result.fileName,
+    transactionCount: result.transactionCount,
+    monthlyIncome: summary.monthlyIncome,
+    monthlyExpenses: summary.monthlyExpenses,
+    monthlyGiving: summary.monthlyGiving,
+    investedNetWorth: summary.investedNetWorth,
+    startDate: summary.startDate,
+    endDate: summary.endDate,
+    warnings: summary.warnings.slice(0, 4),
+  };
+}
+
 export function parseQuickenText(
   fileName: string,
   text: string

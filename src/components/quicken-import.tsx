@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,15 +35,22 @@ export function QuickenImport({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const pasteRef = useRef<HTMLTextAreaElement>(null);
+  const seenToken = useRef("");
+  const loadRef = useRef<(blob: Blob, name: string) => Promise<void>>(
+    async () => undefined
+  );
 
   const [payload, setPayload] = useState<ImportResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState("Choose a QIF, drop it on this box, or try the sample.");
+  const [note, setNote] = useState(
+    "Choose a QIF, then click Read file. Or drop it, or try the sample."
+  );
   const [windowMonths, setWindowMonths] = useState<WindowMonths>(12);
   const [showAll, setShowAll] = useState(false);
   const [applied, setApplied] = useState(false);
   const [showPaste, setShowPaste] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const router = useRouter();
 
   const rawSummary = payload?.ok
     ? (payload.byWindow?.[windowMonths] ?? null)
@@ -75,34 +83,52 @@ export function QuickenImport({
     }
   }
 
-  function loadFromPicker() {
+  useEffect(() => {
+    loadRef.current = loadBlob;
+  });
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const file = fileRef.current?.files?.[0];
+      if (!file || file.size === 0) return;
+      const token = `${file.name}:${file.size}:${file.lastModified}`;
+      if (token === seenToken.current) return;
+      seenToken.current = token;
+      void loadRef.current(file, file.name);
+    }, 300);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const wantsSample =
+      submitter instanceof HTMLButtonElement && submitter.name === "sample";
     const file = fileRef.current?.files?.[0];
-    if (file) {
+    const paste = pasteRef.current?.value?.trim() ?? "";
+
+    if (wantsSample) {
+      event.preventDefault();
+      void loadSample();
+      return;
+    }
+    if (file && file.size > 0) {
+      event.preventDefault();
+      seenToken.current = `${file.name}:${file.size}:${file.lastModified}`;
       void loadBlob(file, file.name);
       return;
     }
-    const paste = pasteRef.current?.value?.trim() ?? "";
     if (paste) {
-      setBusy(true);
-      setApplied(false);
-      try {
-        const result = parseQuickenText("pasted.qif", paste);
-        setPayload(result);
-        setNote(
-          result.ok
-            ? `Loaded pasted text: ${result.transactionCount} transactions.`
-            : (result.error ?? "Paste did not contain transactions.")
-        );
-      } finally {
-        setBusy(false);
-      }
+      event.preventDefault();
+      const result = parseQuickenText("pasted.qif", paste);
+      setPayload(result);
+      setNote(
+        result.ok
+          ? `Loaded pasted text: ${result.transactionCount} transactions.`
+          : (result.error ?? "Paste did not contain transactions.")
+      );
       return;
     }
-    setNote("Nothing to read. Choose a QIF, drop it here, paste text, or try the sample.");
-    setPayload({
-      ok: false,
-      error: "Nothing to read. Choose a QIF, drop it here, or try the sample.",
-    });
+    setNote("Posting the file to Steward…");
   }
 
   async function loadSample() {
@@ -120,11 +146,8 @@ export function QuickenImport({
           ? `Loaded sample.qif: ${result.transactionCount} transactions.`
           : (result.error ?? "Sample failed.")
       );
-    } catch (cause) {
-      const message =
-        cause instanceof Error ? cause.message : "Sample failed.";
-      setPayload({ ok: false, error: message });
-      setNote(message);
+    } catch {
+      router.push("/steward/import?sample=1");
     } finally {
       setBusy(false);
     }
@@ -185,15 +208,19 @@ export function QuickenImport({
       </CardHeader>
       <CardContent className="flex flex-col gap-5 pt-5">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Choose your QIF, drop it on the box, or try the sample. Totals appear
-          on this page.
+          After the filename appears, click <strong>Read file</strong>. If the
+          page still sits still, drop the file on the box or try the sample.
         </p>
 
-        <div
+        <form
           className={cn(
             "flex flex-col gap-4 rounded-2xl border border-dashed bg-muted/30 px-4 py-6",
             dragging ? "border-steward bg-steward/10" : "border-border"
           )}
+          action="/steward/import"
+          method="post"
+          encType="multipart/form-data"
+          onSubmit={onSubmit}
           onDragEnter={(event) => {
             event.preventDefault();
             setDragging(true);
@@ -207,7 +234,10 @@ export function QuickenImport({
             event.preventDefault();
             setDragging(false);
             const file = event.dataTransfer.files?.[0];
-            if (file) void loadBlob(file, file.name);
+            if (file) {
+              seenToken.current = `${file.name}:${file.size}:${file.lastModified}`;
+              void loadBlob(file, file.name);
+            }
           }}
         >
           <label className="flex flex-col gap-2 text-sm font-medium">
@@ -215,27 +245,30 @@ export function QuickenImport({
             <input
               ref={fileRef}
               type="file"
+              name="quicken"
               accept=".qif,.csv,.txt,.tsv,.QIF,.CSV"
               className="block w-full cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) void loadBlob(file, file.name);
+                if (!file) return;
+                seenToken.current = `${file.name}:${file.size}:${file.lastModified}`;
+                void loadBlob(file, file.name);
               }}
             />
           </label>
           <div className="flex flex-wrap gap-2">
             <button
-              type="button"
+              type="submit"
               disabled={busy}
-              onClick={loadFromPicker}
               className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-60"
             >
               {busy ? "Reading…" : "Read file"}
             </button>
             <button
-              type="button"
+              type="submit"
+              name="sample"
+              value="1"
               disabled={busy}
-              onClick={() => void loadSample()}
               className="inline-flex h-10 w-fit items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium hover:bg-muted disabled:opacity-60"
             >
               Try a sample
@@ -264,13 +297,14 @@ export function QuickenImport({
               Paste
               <textarea
                 ref={pasteRef}
+                name="paste"
                 rows={5}
                 className="w-full rounded-lg border border-input bg-background px-2.5 py-2 font-mono text-xs"
                 placeholder={"!Type:Bank\nD3/15'26\nT-52.10\nPStore\nLGroceries\n^"}
               />
             </label>
           ) : null}
-        </div>
+        </form>
 
         {hydrated && state.lastQuicken && !payload?.ok ? (
           <p className="text-sm text-muted-foreground">

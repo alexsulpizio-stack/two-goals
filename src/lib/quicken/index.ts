@@ -1,6 +1,7 @@
 export { decodeQuickenBytes, parseQuickenFile, readAsArrayBuffer, readDroppedFile } from "./parse";
-export type { ImportResult } from "./from-form";
+export type { CompactImport, ImportResult } from "./from-form";
 export {
+  compactImport,
   parseQuickenBytes,
   parseQuickenFormData,
   parseQuickenSources,
