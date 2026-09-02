@@ -46,11 +46,20 @@ export type LedgerSnapshot = {
 
 export type NetWorthSnapshot = LedgerSnapshot;
 
+export type InterviewAnswers = Record<string, string>;
+
+export type InterviewState = {
+  step: number;
+  answers: InterviewAnswers;
+  completedAt: string | null;
+};
+
 export type AppState = {
   practices: Record<string, PracticeDay>;
   prayers: PrayerEntry[];
   finance: FinanceInputs;
   snapshots: LedgerSnapshot[];
+  interview: InterviewState;
 };
 
 export const emptyPractice = (): PracticeDay => ({
@@ -72,9 +81,16 @@ export const defaultFinance: FinanceInputs = {
   targetMonths: 12,
 };
 
+export const emptyInterview = (): InterviewState => ({
+  step: -1,
+  answers: {},
+  completedAt: null,
+});
+
 export const defaultState: AppState = {
   practices: {},
   prayers: [],
   finance: defaultFinance,
   snapshots: [],
+  interview: emptyInterview(),
 };

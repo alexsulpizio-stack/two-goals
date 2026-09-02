@@ -229,7 +229,12 @@ export function StewardView() {
         <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
           This page does not earn the money. It sizes the new take-home the
           deadline requires, then you name the stream and make the ask. A
-          smaller life is not the plan. Giving stays.
+          smaller life is not the plan. Giving stays. If you do not know
+          which stream, sit for{" "}
+          <a href="/counsel" className="font-medium underline-offset-4 hover:underline">
+            Counsel
+          </a>{" "}
+          first.
         </p>
       </section>
 

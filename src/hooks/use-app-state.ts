@@ -8,6 +8,7 @@ import {
   totalMonthlyIncome,
 } from "@/lib/income";
 import { asNextStream } from "@/lib/income-plays";
+import { asInterview } from "@/lib/interview";
 import {
   defaultState,
   emptyPractice,
@@ -40,6 +41,7 @@ function mergeState(parsed: Partial<AppState>): AppState {
       nextStream: asNextStream(parsed.finance?.nextStream),
     },
     snapshots: asLedgerSnapshots(parsed.snapshots),
+    interview: asInterview(parsed.interview),
   };
 }
 

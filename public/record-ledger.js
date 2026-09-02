@@ -92,6 +92,7 @@
         targetMonths: 12,
       },
       snapshots: [],
+      interview: { step: -1, answers: {}, completedAt: null },
     };
   }
 
@@ -1297,12 +1298,604 @@
     }
   }
 
+  function interviewQuestions() {
+    const node = document.getElementById("interview-questions");
+    if (!node) return [];
+    try {
+      const parsed = JSON.parse(node.textContent || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function asInterview(value) {
+    const empty = { step: -1, answers: {}, completedAt: null };
+    if (!value || typeof value !== "object") return empty;
+    const questions = interviewQuestions();
+    const answers = {};
+    const raw = value.answers && typeof value.answers === "object" ? value.answers : {};
+    if (questions.length > 0) {
+      questions.forEach((question) => {
+        const text = raw[question.id];
+        if (typeof text === "string") answers[question.id] = text.slice(0, 2000);
+      });
+    } else {
+      Object.keys(raw).forEach((key) => {
+        if (typeof raw[key] === "string") answers[key] = raw[key].slice(0, 2000);
+      });
+    }
+    const step = Number(value.step);
+    return {
+      step: Number.isFinite(step) ? Math.trunc(step) : -1,
+      answers,
+      completedAt:
+        typeof value.completedAt === "string" && value.completedAt
+          ? value.completedAt
+          : null,
+    };
+  }
+
+  function parseAnswerNumber(raw) {
+    if (!raw) return 0;
+    const cleaned = String(raw).replace(/[^0-9.]/g, "");
+    if (!cleaned) return 0;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  }
+
+  function firstLine(raw, max) {
+    const line = String(raw || "")
+      .split(/\n/)[0]
+      .trim();
+    return line.slice(0, max || 80);
+  }
+
+  function namedPeople(raw) {
+    if (!raw || !String(raw).trim()) return [];
+    return String(raw)
+      .split(/[\n;,]+|\s+and\s+|\s+&\s+/i)
+      .map((part) => part.replace(/^[\s•\-]+/, "").trim())
+      .filter((part) => part.length > 1 && !/^my network$/i.test(part))
+      .slice(0, 8);
+  }
+
+  function monthlyCapacityFromAnswers(answers) {
+    const hours = parseAnswerNumber(answers.hoursWeek);
+    const rate = parseAnswerNumber(answers.honestRate);
+    if (hours <= 0 || rate <= 0) return null;
+    return hours * rate * (52 / 12);
+  }
+
+  function streamFromAnswers(answers, extraNeeded) {
+    const offer = firstLine(answers.smallestOffer, 80);
+    const gift = firstLine(answers.gift, 80);
+    const skill = firstLine(answers.paidSkills, 80);
+    const name = offer || gift || skill || "";
+    const price = parseAnswerNumber(answers.price);
+    const monthly = extraNeeded > 0 ? Math.round(extraNeeded) : price > 0 ? price : 0;
+    const people = namedPeople(answers.namesThisMonth);
+    const who =
+      people.length > 0
+        ? people.slice(0, 3).join(", ")
+        : "three people who already know this work";
+    const priceBit =
+      price > 0
+        ? ` at ${formatMoney(price)}`
+        : extraNeeded > 0
+          ? ` sized to ${formatMoney(monthly)} a month`
+          : "";
+    const offerBit = offer || name || "the smallest finished offer";
+    const ask = name
+      ? `This week ask ${who} to buy ${offerBit}${priceBit}.`
+      : `Write three names, then ask them to buy the smallest finished offer${priceBit}.`;
+    return { name, monthly, ask };
+  }
+
+  function deriveCounselJs(answers, sprint) {
+    const questions = interviewQuestions();
+    const extraNeeded = Math.max(0, sprint.extraMonthlySavings || 0);
+    const hasFinishLine = Boolean(sprint.reached || sprint.onTrack || extraNeeded > 0);
+    const hours = parseAnswerNumber(answers.hoursWeek);
+    const rate = parseAnswerNumber(answers.honestRate);
+    const capacity = monthlyCapacityFromAnswers(answers);
+    const dateHonest = !hasFinishLine
+      ? false
+      : extraNeeded <= 0 || (capacity != null && capacity >= extraNeeded * 0.8);
+    const filled = questions.filter((question) => (answers[question.id] || "").trim()).length;
+    const total = questions.length || 22;
+    const completeness = total > 0 ? filled / total : 0;
+    const hasNames = namedPeople(answers.namesThisMonth).length > 0;
+    const hasOffer = Boolean((answers.smallestOffer || "").trim());
+    const hasHours = hours > 0;
+    const hasRate = rate > 0;
+    let nextWeek = "low";
+    if (completeness >= 0.8 && hasNames && hasOffer && hasHours && hasRate) nextWeek = "high";
+    else if (completeness >= 0.45 && (hasNames || hasOffer)) nextWeek = "medium";
+    let date = "low";
+    if (extraNeeded <= 0) date = hasFinishLine && dateHonest ? "medium" : "none";
+    else if (!dateHonest) date = "none";
+    else if (capacity != null && capacity >= extraNeeded * 0.8 && hasNames && hasOffer) date = "medium";
+    const stream = streamFromAnswers(answers, extraNeeded);
+    const weeklyAsk =
+      extraNeeded > 0 ? Math.round(extraNeeded / (52 / 12)) : parseAnswerNumber(answers.price);
+    const people = namedPeople(answers.namesThisMonth);
+    const fences = [];
+    if ((answers.refuse || "").trim()) fences.push(answers.refuse.trim());
+    if (answers.givingStay === "no") {
+      fences.push(
+        "Do not pause giving to manufacture a surplus. Lower the giving line on Steward if it will not stay, so the nest egg is honest — or keep giving and create the income."
+      );
+    }
+    if ((answers.quit || "").trim()) {
+      fences.push(`You said you would quit if: ${answers.quit.trim()}`);
+    }
+    let honesty = "";
+    if (!hasFinishLine) {
+      honesty =
+        "Enter living and giving on Steward so a nest egg exists. Then hours × a rate you could get this month can be tested against a real gap. I will not invent a finish line.";
+    } else if (extraNeeded <= 0) {
+      honesty =
+        "The ledger already reaches the date if you do not inflate living. Counsel here is protection and overflow, not a rescue stream.";
+    } else if (hours <= 0 || rate <= 0) {
+      honesty =
+        "I cannot tell whether the date is honest until you name hours you actually have and a rate a named person would pay this month.";
+    } else if (!dateHonest && capacity != null) {
+      honesty = `At ${hours} hours a week × ${formatMoney(rate)} an hour you can create about ${formatMoney(capacity)} a month. The sprint still needs ${formatMoney(extraNeeded)} in new take-home. That date is not honest unless you raise the rate, add hours without wrecking the walk, or move the window.`;
+    } else if (capacity != null) {
+      honesty = `Hours × rate can cover about ${formatMoney(capacity)} a month against a gap of ${formatMoney(extraNeeded)}. That is mathematically possible. It is not a yes from a buyer. The date stays unproven until the first invoice clears.`;
+    } else {
+      honesty = "Name hours and a rate so the date can be tested against capacity.";
+    }
+    const thisWeek = [];
+    const competing = (answers.competing || "").trim();
+    if (competing) {
+      thisWeek.push({
+        kicker: "Before the ask",
+        title: "Put the walk before the competitor",
+        body: `You named what wins the first hour: ${firstLine(competing, 160)}. Open the Word and pray before that thing gets the morning. The sprint is not allowed to eat Goal 01.`,
+      });
+    } else {
+      thisWeek.push({
+        kicker: "Before the ask",
+        title: "Remain, then work",
+        body: (answers.weekWithJesus || "").trim()
+          ? answers.weekWithJesus.trim()
+          : "Open the Word. Pray. Gather with the church. Love a neighbor. Then make the income ask. Order is not a slogan here.",
+      });
+    }
+    if (people.length === 0) {
+      thisWeek.push({
+        kicker: "This week",
+        title: "Write three names before you invent a product",
+        body: "I will not name a winning offer for a market I cannot see. People who already know your work are the market you can reach this month. No names, no ask.",
+      });
+    } else {
+      thisWeek.push({
+        kicker: "This week",
+        title: `Ask ${people.slice(0, 3).join(", ")}`,
+        body: stream.ask,
+      });
+    }
+    if ((answers.smallestOffer || "").trim()) {
+      const price = parseAnswerNumber(answers.price);
+      thisWeek.push({
+        kicker: "The offer",
+        title: firstLine(answers.smallestOffer, 80),
+        body:
+          price > 0
+            ? `Charge ${formatMoney(price)}. Finish it in fourteen days. Put the first dollar on the Steward ledger when it arrives.`
+            : "Name a price you can say out loud, then finish the work in fourteen days. A free sample is not a stream.",
+      });
+    } else if ((answers.gift || "").trim() || (answers.paidSkills || "").trim()) {
+      thisWeek.push({
+        kicker: "The offer",
+        title: "Shrink the gift to a fourteen-day job",
+        body: `You already have something people pay for: ${firstLine(answers.gift || answers.paidSkills, 120)}. Turn it into one named job with a date and a price. Do not start a brand.`,
+      });
+    }
+    if (extraNeeded > 0) {
+      thisWeek.push({
+        kicker: "The size",
+        title: weeklyAsk > 0 ? `This week must aim at ${formatMoney(weeklyAsk)}` : "Size the week to the gap on Steward",
+        body:
+          capacity != null
+            ? `The month still needs ${formatMoney(extraNeeded)} in new take-home. Your hours × rate cover about ${formatMoney(capacity)} a month. ${dateHonest ? "The arithmetic can work." : "The arithmetic does not work yet."}`
+            : `Steward still needs ${formatMoney(extraNeeded)} a month in new take-home. Name hours and a rate so this number can be tested.`,
+      });
+    }
+    const walkActions = [
+      {
+        kicker: "Goal 01",
+        title: "Live eternally with Jesus Christ",
+        body: (answers.weekWithJesus || "").trim()
+          ? answers.weekWithJesus.trim()
+          : "Abide: Word, prayer, the gathered church, love of neighbor. Salvation is a gift. These are how a saved person remains.",
+      },
+    ];
+    if ((answers.prayFor || "").trim()) {
+      walkActions.push({ kicker: "Pray", title: "By name", body: answers.prayFor.trim() });
+    }
+    if ((answers.energy || "").trim()) {
+      walkActions.push({ kicker: "Limits", title: "The week has a body", body: answers.energy.trim() });
+    }
+    const moneyActions = [];
+    if (stream.name) {
+      moneyActions.push({ kicker: "Goal 02", title: stream.name, body: stream.ask });
+    } else {
+      moneyActions.push({
+        kicker: "Goal 02",
+        title: extraNeeded > 0 ? `Create ${formatMoney(extraNeeded)} a month` : "Name the stream on Steward",
+        body: "Counsel cannot pick the product until you name an offer and three people. The gap is on Steward. The work is the ask.",
+      });
+    }
+    if ((answers.failedTries || "").trim()) {
+      moneyActions.push({
+        kicker: "Do not repeat",
+        title: "You already learned this",
+        body: answers.failedTries.trim(),
+      });
+    }
+    if ((answers.reachWithoutAds || "").trim()) {
+      moneyActions.push({
+        kicker: "Reach",
+        title: "Without ads this month",
+        body: answers.reachWithoutAds.trim(),
+      });
+    }
+    if ((answers.cashRisk || "").trim()) {
+      const cash = parseAnswerNumber(answers.cashRisk);
+      moneyActions.push({
+        kicker: "Cash at risk",
+        title: cash > 0 ? formatMoney(cash) : "None",
+        body:
+          cash > 0
+            ? "Spend that on making the fourteen-day offer real. Not on a logo. Not on ads."
+            : "Zero cash at risk means the offer is time and skill. Do not stock a store you cannot fill.",
+      });
+    }
+    const floor = parseAnswerNumber(answers.floor);
+    if (floor > 0) {
+      moneyActions.push({
+        kicker: "Household floor",
+        title: `${formatMoney(floor)} a month must not break`,
+        body: (answers.dependents || "").trim()
+          ? answers.dependents.trim()
+          : "If Steward’s living number is lower than this floor, the ledger is lying. Raise living to the floor, then create income.",
+      });
+    } else if ((answers.dependents || "").trim()) {
+      moneyActions.push({
+        kicker: "Must not break",
+        title: "People first",
+        body: answers.dependents.trim(),
+      });
+    }
+    if ((answers.tuesday || "").trim()) {
+      moneyActions.push({
+        kicker: "The life",
+        title: "A Tuesday you are actually funding",
+        body: answers.tuesday.trim(),
+      });
+    }
+    if ((answers.alreadyPays || "").trim()) {
+      moneyActions.push({
+        kicker: "Already paying",
+        title: "Do not ignore what exists",
+        body: answers.alreadyPays.trim(),
+      });
+    }
+    if (answers.sellWhere === "online") {
+      moneyActions.push({
+        kicker: "Channel",
+        title: "Online only is slower",
+        body: "A first yes this month usually comes from a person you can stand in front of. If you cannot, then the list in “reach without ads” has to do that work. Do not buy traffic yet.",
+      });
+    }
+    return {
+      answered: filled,
+      total,
+      nextWeekConfidence: nextWeek,
+      dateConfidence: date,
+      dateHonest,
+      honesty,
+      stream,
+      thisWeek,
+      walkActions,
+      moneyActions,
+      fences,
+    };
+  }
+
+  function labelLevel(level) {
+    if (level === "none") return "None";
+    if (level === "low") return "Low";
+    if (level === "medium") return "Medium";
+    return "High";
+  }
+
+  function actionGroupHtml(kicker, title, actions) {
+    const items = (actions || [])
+      .map(
+        (action) => `<li class="flex flex-col gap-2 rounded-2xl border border-border/80 bg-card/80 p-5">
+        <p class="text-xs tracking-[0.18em] text-muted-foreground uppercase">${escapeAttr(action.kicker)}</p>
+        <h3 class="font-heading text-xl leading-tight">${escapeAttr(action.title)}</h3>
+        <p class="text-sm leading-relaxed text-muted-foreground">${escapeAttr(action.body)}</p>
+      </li>`
+      )
+      .join("");
+    return `<div class="flex flex-col gap-3">
+      <div>
+        <p class="text-sm tracking-[0.18em] text-muted-foreground uppercase">${escapeAttr(kicker)}</p>
+        <h2 class="font-heading text-2xl sm:text-3xl">${escapeAttr(title)}</h2>
+      </div>
+      <ol class="flex flex-col gap-3">${items}</ol>
+    </div>`;
+  }
+
+  function confidenceCardHtml(level, title, body) {
+    return `<div class="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card/80 p-5">
+      <p class="text-xs tracking-[0.18em] text-muted-foreground uppercase">${escapeAttr(level)}</p>
+      <h2 class="font-heading text-xl leading-tight">${escapeAttr(title)}</h2>
+      <p class="text-sm leading-relaxed text-muted-foreground">${escapeAttr(body)}</p>
+    </div>`;
+  }
+
+  function reportHtml(report) {
+    const weekBody =
+      report.nextWeekConfidence === "high"
+        ? "You named people, an offer, hours, and a rate. The list below is a week of work, not a vibe."
+        : report.nextWeekConfidence === "medium"
+          ? "Enough is here to start. Names and a fourteen-day offer would raise this."
+          : "Too many blanks. The list below is still honest, and thinner than it should be.";
+    const dateBody =
+      report.dateConfidence === "none"
+        ? "I will not bless a date the arithmetic cannot carry."
+        : report.dateConfidence === "medium"
+          ? "The hours × rate can cover the gap. A buyer has not said yes. That is not the same as arriving."
+          : "Possible is not promised. The date stays unproven until money arrives.";
+    const fences =
+      report.fences.length > 0
+        ? `<div class="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card/80 p-5 sm:p-7">
+        <p class="text-sm tracking-[0.18em] text-muted-foreground uppercase">Fences</p>
+        <h2 class="font-heading text-2xl">Do not cross these to hit a date</h2>
+        <ul class="flex flex-col gap-2">${report.fences
+          .map((fence) => `<li class="text-sm leading-relaxed">${escapeAttr(fence)}</li>`)
+          .join("")}</ul>
+      </div>`
+        : "";
+    return `<div class="flex flex-col gap-6">
+      <div class="grid gap-4 lg:grid-cols-3">
+        ${confidenceCardHtml(labelLevel("high"), "The interview", `${report.answered} of ${report.total} answered. The questions were the right ones. Missing answers are missing facts, not a mystery about you.`)}
+        ${confidenceCardHtml(labelLevel(report.nextWeekConfidence), "This week’s actions", weekBody)}
+        ${confidenceCardHtml(labelLevel(report.dateConfidence), "The independence date", dateBody)}
+      </div>
+      <div class="rounded-2xl border px-5 py-4 text-sm leading-relaxed ${
+        report.dateHonest ? "border-steward/30 bg-steward/10" : "border-faith/30 bg-faith/10"
+      }">${escapeAttr(report.honesty)}</div>
+      ${actionGroupHtml("Do these", "This week", report.thisWeek)}
+      ${actionGroupHtml("Goal 01", "The walk", report.walkActions)}
+      ${actionGroupHtml("Goal 02", "The stream", report.moneyActions)}
+      ${fences}
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="button" data-interview-apply-stream="" class="inline-flex h-11 items-center justify-center rounded-lg bg-steward px-5 text-sm font-medium text-white hover:bg-steward/90">Put this stream on Steward</button>
+        <a href="/steward" class="inline-flex h-11 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium hover:bg-muted">Open Steward</a>
+        <button type="button" data-interview-retake="" class="inline-flex h-11 items-center justify-center rounded-lg px-4 text-sm font-medium text-muted-foreground underline-offset-4 hover:underline">Revise answers</button>
+      </div>
+      <p id="counsel-apply-note" class="text-sm text-muted-foreground" hidden></p>
+    </div>`;
+  }
+
+  function collectInterviewAnswers(existing) {
+    const answers = { ...(existing || {}) };
+    document.querySelectorAll("[data-interview-field]").forEach((node) => {
+      const id = node.getAttribute("data-interview-field");
+      if (!id) return;
+      if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) {
+        answers[id] = node.value.slice(0, 2000);
+      }
+    });
+    return answers;
+  }
+
+  function writeInterview(patch) {
+    const state = readState();
+    const current = asInterview(state.interview);
+    const next = {
+      step: patch.step !== undefined ? patch.step : current.step,
+      answers: patch.answers || current.answers,
+      completedAt:
+        patch.completedAt !== undefined ? patch.completedAt : current.completedAt,
+    };
+    state.interview = next;
+    writeState(state);
+    window.dispatchEvent(new Event("two-goals-external"));
+    return next;
+  }
+
+  function saveInterviewDraft() {
+    const state = readState();
+    const current = asInterview(state.interview);
+    const answers = collectInterviewAnswers(current.answers);
+    state.interview = { ...current, answers };
+    writeState(state);
+  }
+
+  function paintInterview(forceReport) {
+    const root = document.getElementById("counsel-root");
+    if (!root) return;
+    const questions = interviewQuestions();
+    const state = readState();
+    const interview = asInterview(state.interview);
+    const complete = Boolean(interview.completedAt) || interview.step >= questions.length;
+    const step = complete ? questions.length : interview.step;
+    const showingIntro = !complete && step < 0;
+    const questionIndex = complete ? questions.length : Math.max(0, step);
+    const intro = document.getElementById("counsel-intro");
+    const ask = document.getElementById("counsel-ask");
+    const report = document.getElementById("counsel-report");
+    if (intro) intro.hidden = !showingIntro;
+    if (ask) ask.hidden = showingIntro || complete;
+    if (report) report.hidden = !complete;
+    const question = questions[Math.min(questionIndex, Math.max(0, questions.length - 1))];
+    if (question) {
+      setText("counsel-section", question.section);
+      setText(
+        "counsel-progress",
+        `${Math.min(questionIndex + 1, questions.length)} of ${questions.length}`
+      );
+      const fill = document.getElementById("counsel-progress-fill");
+      if (fill) {
+        fill.style.width = `${((Math.min(questionIndex + 1, questions.length)) / questions.length) * 100}%`;
+      }
+    }
+    questions.forEach((item, index) => {
+      const card = document.querySelector(`[data-interview-q="${item.id}"]`);
+      if (card) card.hidden = index !== questionIndex || showingIntro || complete;
+    });
+    const nextBtn = document.getElementById("counsel-next");
+    if (nextBtn) {
+      nextBtn.textContent =
+        questionIndex >= questions.length - 1 ? "See this week’s actions" : "Next";
+    }
+    const active = document.activeElement;
+    questions.forEach((item) => {
+      const field = document.getElementById(`answer-${item.id}`);
+      if (
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLTextAreaElement
+      ) {
+        if (active === field) return;
+        const value = interview.answers[item.id] || "";
+        if (field.value !== value) field.value = value;
+      }
+      document.querySelectorAll(`[data-interview-choice="${item.id}"]`).forEach((button) => {
+        const selected = interview.answers[item.id] === button.getAttribute("data-value");
+        button.setAttribute("aria-pressed", selected ? "true" : "false");
+        button.classList.toggle("border-faith/40", selected);
+        button.classList.toggle("bg-faith/10", selected);
+        button.classList.toggle("border-border", !selected);
+        button.classList.toggle("bg-background", !selected);
+      });
+    });
+    if (complete) {
+      const body = document.getElementById("counsel-report-body");
+      if (body && body.dataset.reactReport === "1" && !forceReport) {
+        return;
+      }
+      if (body && (forceReport || body.dataset.painted !== "1")) {
+        const finance = {
+          ...defaultState().finance,
+          ...state.finance,
+          incomeSources: normalizeIncomeSources(state.finance),
+        };
+        const sprint = sprintPlan(finance);
+        body.innerHTML = reportHtml(deriveCounselJs(interview.answers, sprint));
+        body.dataset.painted = "1";
+      }
+    } else {
+      const body = document.getElementById("counsel-report-body");
+      if (body) body.dataset.painted = "";
+    }
+  }
+
+  function interviewStart() {
+    writeInterview({ step: 0, completedAt: null });
+    paintInterview();
+    document.getElementById("counsel-ask")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function interviewBack() {
+    const state = readState();
+    const current = asInterview(state.interview);
+    const answers = collectInterviewAnswers(current.answers);
+    const nextStep = current.step <= 0 ? -1 : current.step - 1;
+    writeInterview({ step: nextStep, answers, completedAt: null });
+    paintInterview();
+  }
+
+  function interviewNext() {
+    const questions = interviewQuestions();
+    const state = readState();
+    const current = asInterview(state.interview);
+    const answers = collectInterviewAnswers(current.answers);
+    const last = Math.max(0, questions.length - 1);
+    const atLast = current.step >= last;
+    if (atLast) {
+      writeInterview({
+        step: questions.length,
+        answers,
+        completedAt: new Date().toISOString(),
+      });
+      paintInterview(true);
+      document.getElementById("counsel-report")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const step = current.step < 0 ? 0 : current.step + 1;
+    writeInterview({ step, answers, completedAt: null });
+    paintInterview();
+  }
+
+  function interviewChoice(id, value) {
+    if (!id || !value) return;
+    const state = readState();
+    const current = asInterview(state.interview);
+    const answers = { ...collectInterviewAnswers(current.answers), [id]: value };
+    writeInterview({ answers });
+    paintInterview();
+  }
+
+  function interviewRetake() {
+    const state = readState();
+    const current = asInterview(state.interview);
+    writeInterview({ step: 0, answers: current.answers, completedAt: null });
+    paintInterview();
+    document.getElementById("counsel-ask")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function interviewApplyStream() {
+    const state = readState();
+    const interview = asInterview(state.interview);
+    const finance = {
+      ...defaultState().finance,
+      ...state.finance,
+      incomeSources: normalizeIncomeSources(state.finance),
+    };
+    const sprint = sprintPlan(finance);
+    const report = deriveCounselJs(interview.answers, sprint);
+    if (!report.stream.name && !report.stream.ask) {
+      const note = document.getElementById("counsel-apply-note");
+      if (note) {
+        note.hidden = false;
+        note.textContent =
+          "Name an offer and three people first, or write the stream by hand on Steward.";
+      }
+      return;
+    }
+    state.finance = {
+      ...finance,
+      nextStream: {
+        name: report.stream.name,
+        monthly: report.stream.monthly,
+        ask: report.stream.ask,
+        status: report.stream.name && report.stream.ask ? "asked" : "named",
+      },
+    };
+    writeState(state);
+    const note = document.getElementById("counsel-apply-note");
+    if (note) {
+      note.hidden = false;
+      note.textContent = "Saved on Steward as this week’s stream. Open Steward to keep the ask.";
+    }
+    window.dispatchEvent(new Event("two-goals-external"));
+  }
+
   function paintLife() {
     paintNav();
     const state = readState();
     paintPracticeBoxes(state);
     paintPrayers(state);
     paintCompassMove();
+    paintInterview();
     setText("compass-date", formatLongDate());
     setText("walk-date", formatLongDate());
   }
@@ -1371,6 +1964,40 @@
         event.stopPropagation();
         setTargetMonths(Number(monthsButton.getAttribute("data-target-months")));
       }
+      if (target.closest("[data-interview-start]")) {
+        event.preventDefault();
+        event.stopPropagation();
+        interviewStart();
+      }
+      if (target.closest("[data-interview-back]")) {
+        event.preventDefault();
+        event.stopPropagation();
+        interviewBack();
+      }
+      if (target.closest("[data-interview-next]")) {
+        event.preventDefault();
+        event.stopPropagation();
+        interviewNext();
+      }
+      if (target.closest("[data-interview-retake]")) {
+        event.preventDefault();
+        event.stopPropagation();
+        interviewRetake();
+      }
+      if (target.closest("[data-interview-apply-stream]")) {
+        event.preventDefault();
+        event.stopPropagation();
+        interviewApplyStream();
+      }
+      const choice = target.closest("[data-interview-choice]");
+      if (choice) {
+        event.preventDefault();
+        event.stopPropagation();
+        interviewChoice(
+          choice.getAttribute("data-interview-choice"),
+          choice.getAttribute("data-value")
+        );
+      }
     },
     true
   );
@@ -1378,6 +2005,15 @@
   document.addEventListener(
     "input",
     (event) => {
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement
+      ) {
+        if (event.target.hasAttribute("data-interview-field")) {
+          saveInterviewDraft();
+          return;
+        }
+      }
       if (!(event.target instanceof HTMLInputElement)) return;
       if (
         !FIELD_IDS.includes(event.target.id) &&

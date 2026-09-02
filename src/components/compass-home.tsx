@@ -77,6 +77,31 @@ export function CompassHome() {
         />
       </section>
 
+      <section className="rounded-2xl border border-border/80 bg-card/80 p-5 sm:p-7">
+        <p className="text-sm tracking-[0.18em] text-muted-foreground uppercase">
+          Before you invent a stream
+        </p>
+        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-2xl">
+            <h2 className="font-heading text-2xl leading-tight sm:text-3xl">
+              Sit for Counsel. Be asked the questions that size the week.
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              High confidence I can interview you. Medium I can name this
+              week’s ask once you answer. Low I can pick a winning product
+              before a buyer says yes. If hours × rate cannot cover the gap,
+              the date is not honest.
+            </p>
+          </div>
+          <a
+            href="/counsel"
+            className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg bg-faith px-5 text-sm font-medium text-white hover:bg-faith/90"
+          >
+            Open Counsel
+          </a>
+        </div>
+      </section>
+
       <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
         <Card className="bg-card/80">
           <CardHeader className="border-b">
