@@ -127,4 +127,11 @@ assert.equal(arrived.reached, true);
 assert.equal(arrived.onTrack, true);
 assert.equal(arrived.lumpSumNeeded, 0);
 
+const givingOnly = independencePlan({
+  ...defaultFinance,
+  monthlyGiving: 400,
+});
+assert.equal(givingOnly.hasInputs, true);
+assert.equal(givingOnly.fiNumber, 120_000);
+
 console.log("finance tests passed");

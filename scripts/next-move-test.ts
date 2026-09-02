@@ -10,6 +10,15 @@ const empty = nextMove(
   defaultFinance
 );
 assert.match(empty.headline, /living costs and giving/i);
+assert.equal(empty.lines.length, 3);
+
+const givingOnly = {
+  ...defaultFinance,
+  monthlyGiving: 500,
+};
+const givingPlan = independencePlan(givingOnly);
+assert.equal(givingPlan.hasInputs, true);
+assert.ok(givingPlan.fiNumber > 0);
 
 const bleed = {
   ...defaultFinance,

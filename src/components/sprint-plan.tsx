@@ -30,6 +30,15 @@ export function SprintBoard({
   const deadline = formatMonthYear(addMonths(new Date(), targetMonths));
   const sisterWindow: SprintMonths = targetMonths === 6 ? 12 : 6;
   const move = nextMove(plan, sprint, finance);
+  const offTrack = hasInputs && plan.fiNumber > 0 && !sprint.reached && !sprint.onTrack;
+  const lines =
+    move.lines.length >= 3
+      ? move.lines.slice(0, 3)
+      : [
+          move.lines[0] ?? "More invested each month: —",
+          move.lines[1] ?? "Or a lump sum now: —",
+          move.lines[2] ?? "Or a living ceiling: — (giving stays).",
+        ];
 
   return (
     <section className="flex flex-col gap-4">
@@ -38,7 +47,10 @@ export function SprintBoard({
           <p className="text-sm tracking-[0.18em] text-steward uppercase">
             The window
           </p>
-          <h2 className="font-heading text-3xl leading-tight sm:text-4xl">
+          <h2
+            id="sprint-deadline"
+            className="font-heading text-3xl leading-tight sm:text-4xl"
+          >
             Independent by {deadline}.
           </h2>
         </div>
@@ -47,6 +59,7 @@ export function SprintBoard({
             <button
               key={months}
               type="button"
+              data-target-months={months}
               onClick={() => onTargetMonths(months)}
               className={cn(
                 "rounded-full px-4 py-1.5 text-sm transition-colors",
@@ -62,117 +75,161 @@ export function SprintBoard({
       </div>
 
       <div
+        id="move-box"
         className={cn(
           "rounded-2xl p-6 text-white sm:p-8",
-          !hasInputs
+          !hasInputs || sprint.reached || sprint.onTrack
             ? "bg-steward"
-            : sprint.reached || sprint.onTrack
-              ? "bg-steward"
-              : "bg-faith"
+            : "bg-faith"
         )}
       >
-        <p className="text-xs tracking-[0.22em] text-white/70 uppercase">
+        <p
+          id="move-kicker"
+          className="text-xs tracking-[0.22em] text-white/70 uppercase"
+        >
           {move.kicker}
         </p>
-        <p className="font-heading mt-3 text-3xl leading-tight sm:text-4xl">
+        <p
+          id="move-headline"
+          className="font-heading mt-3 text-3xl leading-tight sm:text-4xl"
+        >
           {move.headline}
         </p>
-        {move.lines.length > 0 ? (
-          <ul className="mt-6 flex flex-col gap-2 text-base leading-relaxed text-white/90 sm:text-lg">
-            {move.lines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        ) : null}
-        {move.footer ? (
-          <p className="mt-6 text-sm leading-relaxed text-white/75">
-            {move.footer}
-          </p>
-        ) : null}
-        {hasInputs && !sprint.reached && plan.fiNumber > 0 ? (
-          <dl className="mt-8 grid gap-4 border-t border-white/20 pt-6 sm:grid-cols-3">
-            <SprintStat
-              label="Nest egg to hit"
-              value={formatMoney(plan.fiNumber)}
-            />
-            <SprintStat
-              label="You have"
-              value={formatMoney(finance.netWorth)}
-            />
-            <SprintStat
-              label="Still to close"
-              value={formatMoney(Math.max(0, plan.fiNumber - finance.netWorth))}
-            />
-          </dl>
-        ) : null}
+        <ul className="mt-6 flex flex-col gap-2 text-base leading-relaxed text-white/90 sm:text-lg">
+          <li id="move-line-surplus">{lines[0]}</li>
+          <li id="move-line-lump">{lines[1]}</li>
+          <li id="move-line-living">{lines[2]}</li>
+        </ul>
+        <p
+          id="move-footer"
+          className="mt-6 text-sm leading-relaxed text-white/75"
+        >
+          {move.footer}
+        </p>
+        <dl className="mt-8 grid gap-4 border-t border-white/20 pt-6 sm:grid-cols-3">
+          <SprintStat
+            id="stat-fi"
+            label="Nest egg to hit"
+            value={plan.fiNumber > 0 ? formatMoney(plan.fiNumber) : "—"}
+          />
+          <SprintStat
+            id="stat-have"
+            label="You have"
+            value={hasInputs ? formatMoney(finance.netWorth) : "—"}
+          />
+          <SprintStat
+            id="stat-gap"
+            label="Still to close"
+            value={
+              plan.fiNumber > 0
+                ? formatMoney(Math.max(0, plan.fiNumber - finance.netWorth))
+                : "—"
+            }
+          />
+        </dl>
       </div>
 
-      {hasInputs && !sprint.reached && !sprint.onTrack ? (
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Lever
-            kicker="Or this"
-            title="Raise the surplus"
-            body={
-              sprint.incomeLift > 0
+      <div id="sprint-levers" className="grid gap-4 lg:grid-cols-3">
+        <Lever
+          figureId="lever-surplus-figure"
+          bodyId="lever-surplus-body"
+          kicker="Or this"
+          title="Raise the surplus"
+          body={
+            !hasInputs || plan.fiNumber <= 0
+              ? "Type living, giving, income, and net worth. This becomes the extra you must invest each month."
+              : sprint.incomeLift > 0
                 ? `Save or earn ${formatMoney(sprint.extraMonthlySavings)} more each month.`
                 : `Put ${formatMoney(sprint.requiredMonthlySavings)} to investments each month.`
-            }
-            figure={formatMoney(sprint.extraMonthlySavings)}
-            figureNote="more / month"
-          />
-          <Lever
-            kicker="Or this"
-            title="Bring a lump sum"
-            body="A bonus, a sale, extra work cashed in once."
-            figure={formatMoney(sprint.lumpSumNeeded)}
-            figureNote="once, now"
-          />
-          <Lever
-            kicker="Or this"
-            title="Shrink living"
-            body={
-              sprint.cutsAloneInsufficient
+          }
+          figure={
+            hasInputs && plan.fiNumber > 0
+              ? formatMoney(sprint.extraMonthlySavings)
+              : "—"
+          }
+          figureNote="more / month"
+        />
+        <Lever
+          figureId="lever-lump-figure"
+          bodyId="lever-lump-body"
+          kicker="Or this"
+          title="Bring a lump sum"
+          body="A bonus, a sale, extra work cashed in once."
+          figure={
+            hasInputs && plan.fiNumber > 0
+              ? formatMoney(sprint.lumpSumNeeded)
+              : "—"
+          }
+          figureNote="once, now"
+        />
+        <Lever
+          figureId="lever-living-figure"
+          bodyId="lever-living-body"
+          kicker="Or this"
+          title="Shrink living"
+          body={
+            !hasInputs || plan.fiNumber <= 0
+              ? "Giving stays. This becomes the most you can spend on living and still hit the date."
+              : sprint.cutsAloneInsufficient
                 ? "Living cuts alone cannot get there."
                 : sprint.expenseCutNeeded > 0
                   ? `Live on ${formatMoney(sprint.maxMonthlyExpenses ?? 0)}. Giving stays.`
                   : "Living can stay. Surplus or a lump sum is the bottleneck."
-            }
-            figure={
-              sprint.cutsAloneInsufficient
+          }
+          figure={
+            !hasInputs || plan.fiNumber <= 0
+              ? "—"
+              : sprint.cutsAloneInsufficient
                 ? "Not enough"
                 : formatMoney(sprint.maxMonthlyExpenses ?? 0)
-            }
-            figureNote="max living / month"
-          />
-        </div>
-      ) : null}
+          }
+          figureNote="max living / month"
+        />
+      </div>
 
-      {hasInputs && sprint.onTrack && !sprint.reached ? (
-        <p className="text-sm text-muted-foreground">
-          Switch to {sisterWindow} months if you want the tighter date. Savings
-          rate {formatPercent(plan.savingsRate)}.
-        </p>
-      ) : null}
+      <p
+        id="sprint-on-track-note"
+        className="text-sm text-muted-foreground"
+        hidden={!hasInputs || !sprint.onTrack || sprint.reached}
+      >
+        Switch to {sisterWindow} months if you want the tighter date. Savings
+        rate {formatPercent(plan.savingsRate)}.
+      </p>
+      <p className="sr-only">{offTrack ? "Off track" : "On track or waiting"}</p>
     </section>
   );
 }
 
-function SprintStat({ label, value }: { label: string; value: string }) {
+function SprintStat({
+  id,
+  label,
+  value,
+}: {
+  id: string;
+  label: string;
+  value: string;
+}) {
   return (
     <div>
       <dt className="text-sm text-white/70">{label}</dt>
-      <dd className="font-heading text-2xl">{value}</dd>
+      <dd id={id} className="font-heading text-2xl">
+        {value}
+      </dd>
     </div>
   );
 }
 
 function Lever({
+  figureId,
+  bodyId,
   kicker,
   title,
   body,
   figure,
   figureNote,
 }: {
+  figureId: string;
+  bodyId: string;
   kicker: string;
   title: string;
   body: string;
@@ -185,11 +242,15 @@ function Lever({
         {kicker}
       </p>
       <p className="font-heading text-2xl leading-tight">{title}</p>
-      <p className="font-heading text-3xl text-steward">{figure}</p>
+      <p id={figureId} className="font-heading text-3xl text-steward">
+        {figure}
+      </p>
       <p className="text-xs tracking-wide text-muted-foreground uppercase">
         {figureNote}
       </p>
-      <p className="text-sm leading-relaxed text-muted-foreground">{body}</p>
+      <p id={bodyId} className="text-sm leading-relaxed text-muted-foreground">
+        {body}
+      </p>
     </article>
   );
 }

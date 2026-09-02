@@ -48,7 +48,8 @@ export function independencePlan(finance: FinanceInputs): IndependencePlan {
   const hasInputs =
     finance.netWorth > 0 ||
     finance.monthlyIncome > 0 ||
-    finance.monthlyExpenses > 0;
+    finance.monthlyExpenses > 0 ||
+    finance.monthlyGiving > 0;
 
   const reached = fiNumber > 0 && finance.netWorth >= fiNumber;
   const progress =
