@@ -52,6 +52,9 @@ export type QuickenSummary = {
   monthlyIncome: number;
   monthlyExpenses: number;
   monthlyGiving: number;
+  periodIncome: number;
+  periodExpenses: number;
+  periodGiving: number;
   investedNetWorth: number | null;
   cashBalance: number | null;
   homeEquityExcluded: number;

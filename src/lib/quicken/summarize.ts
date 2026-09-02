@@ -57,6 +57,8 @@ export function summarizeQuicken(
     string,
     { kind: LedgerKind; total: number; count: number }
   >();
+  let transferCount = 0;
+  let ignoredCount = 0;
 
   for (const item of windowed) {
     const kind = classifyCategory(
@@ -64,9 +66,14 @@ export function summarizeQuicken(
       item.amount,
       bundle.categoryFlags,
       overrides[item.category] ?? overrides[item.category.split(":")[0] ?? ""],
-      item.accountType
+      item.accountType,
+      item.payee
     );
-    if (kind === "transfer" || kind === "ignore") continue;
+    if (kind === "ignore") {
+      ignoredCount += 1;
+      continue;
+    }
+    if (kind === "transfer") transferCount += 1;
     const key = item.category || item.payee || "(uncategorized)";
     const current = buckets.get(key) ?? { kind, total: 0, count: 0 };
     current.kind = kind;
@@ -89,10 +96,13 @@ export function summarizeQuicken(
       .filter((item) => item.kind === kind)
       .reduce((sum, item) => sum + Math.abs(item.total), 0);
 
-  const divisor = monthsCovered;
-  const monthlyIncome = roundMoney(sumAbs("income") / divisor);
-  const monthlyGiving = roundMoney(sumAbs("giving") / divisor);
-  const monthlyExpenses = roundMoney(sumAbs("expense") / divisor);
+  const divisor = Math.max(1, monthsCovered);
+  const periodIncome = roundMoney(sumAbs("income"));
+  const periodGiving = roundMoney(sumAbs("giving"));
+  const periodExpenses = roundMoney(sumAbs("expense"));
+  const monthlyIncome = roundMoney(periodIncome / divisor);
+  const monthlyGiving = roundMoney(periodGiving / divisor);
+  const monthlyExpenses = roundMoney(periodExpenses / divisor);
 
   const accounts = bundle.accounts.map((account) => ({
     ...account,
@@ -114,8 +124,22 @@ export function summarizeQuicken(
     : null;
 
   if (dated.length && monthsCovered < windowMonths) {
+    warnings.unshift(
+      `Averaged over ${monthsCovered} months in the file (${startDate} to ${endDate}), not a full ${windowMonths} months.`
+    );
+  } else if (startDate && endDate) {
+    warnings.unshift(
+      `Averaged over ${monthsCovered} months (${startDate} to ${endDate}). Monthly = total in that span ÷ ${monthsCovered}.`
+    );
+  }
+  if (transferCount > 0) {
     warnings.push(
-      `Only ${monthsCovered} month${monthsCovered === 1 ? "" : "s"} of transactions were in this file, so averages use that span rather than ${windowMonths}.`
+      `${transferCount} transfers were skipped (credit-card payments, account moves, 401k). Charges still count; paying the card does not.`
+    );
+  }
+  if (ignoredCount > 0) {
+    warnings.push(
+      `${ignoredCount} rows were ignored (opening balances, investment lots, tax withholdings).`
     );
   }
   if (!hasBalances) {
@@ -139,6 +163,9 @@ export function summarizeQuicken(
     monthlyIncome,
     monthlyExpenses,
     monthlyGiving,
+    periodIncome,
+    periodExpenses,
+    periodGiving,
     investedNetWorth,
     cashBalance: hasBalances ? roundMoney(cashBalance) : null,
     homeEquityExcluded: roundMoney(homeEquityExcluded),
@@ -168,11 +195,17 @@ export function retotalSummary(
       .filter((item) => item.kind === kind)
       .reduce((sum, item) => sum + Math.abs(item.total), 0);
   const divisor = Math.max(1, summary.monthsCovered);
+  const periodIncome = roundMoney(sumAbs("income"));
+  const periodExpenses = roundMoney(sumAbs("expense"));
+  const periodGiving = roundMoney(sumAbs("giving"));
   return {
     ...summary,
     categories,
-    monthlyIncome: roundMoney(sumAbs("income") / divisor),
-    monthlyExpenses: roundMoney(sumAbs("expense") / divisor),
-    monthlyGiving: roundMoney(sumAbs("giving") / divisor),
+    periodIncome,
+    periodExpenses,
+    periodGiving,
+    monthlyIncome: roundMoney(periodIncome / divisor),
+    monthlyExpenses: roundMoney(periodExpenses / divisor),
+    monthlyGiving: roundMoney(periodGiving / divisor),
   };
 }

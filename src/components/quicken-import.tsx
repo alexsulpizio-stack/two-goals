@@ -198,9 +198,7 @@ export function QuickenImport({
   }
 
   const visibleCategories = summary
-    ? summary.categories
-        .filter((item) => item.kind !== "transfer")
-        .slice(0, showAll ? undefined : 12)
+    ? summary.categories.slice(0, showAll ? undefined : 12)
     : [];
 
   return (
@@ -326,6 +324,8 @@ export function QuickenImport({
                 {summary.startDate && summary.endDate
                   ? ` · ${summary.startDate} to ${summary.endDate}`
                   : ""}
+                {" · "}
+                monthly = span total ÷ {summary.monthsCovered} months
               </p>
               <div className="flex rounded-full border border-border p-1">
                 {([3, 12] as WindowMonths[]).map((months) => (
@@ -351,16 +351,19 @@ export function QuickenImport({
 
             <dl className="grid gap-3 sm:grid-cols-4">
               <Metric
-                label="Monthly income"
+                label="Income / month"
                 value={formatMoney(summary.monthlyIncome)}
+                hint={formatMoney(summary.periodIncome) + " in span"}
               />
               <Metric
-                label="Monthly living"
+                label="Living / month"
                 value={formatMoney(summary.monthlyExpenses)}
+                hint={formatMoney(summary.periodExpenses) + " in span"}
               />
               <Metric
-                label="Monthly giving"
+                label="Giving / month"
                 value={formatMoney(summary.monthlyGiving)}
+                hint={formatMoney(summary.periodGiving) + " in span"}
               />
               <Metric
                 label="Invested net worth"
@@ -382,6 +385,8 @@ export function QuickenImport({
               <div className="flex flex-col gap-2">
                 <p className="text-sm font-medium">
                   Categories in this window. Click a type to correct it.
+                  Transfers (card payments, account moves) are listed so you can
+                  recast one if it should be living or income.
                 </p>
                 <ul className="divide-y rounded-xl border border-border/80">
                   {visibleCategories.map((item) => (
@@ -403,8 +408,7 @@ export function QuickenImport({
                     </li>
                   ))}
                 </ul>
-                {summary.categories.filter((item) => item.kind !== "transfer")
-                  .length > 12 ? (
+                {summary.categories.length > 12 ? (
                   <button
                     type="button"
                     className="self-start text-sm underline-offset-4 hover:underline"
@@ -426,13 +430,24 @@ export function QuickenImport({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
     <div className="rounded-xl bg-muted/50 px-3 py-3">
       <dt className="text-xs tracking-wide text-muted-foreground uppercase">
         {label}
       </dt>
       <dd className="font-heading text-xl">{value}</dd>
+      {hint ? (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      ) : null}
     </div>
   );
 }

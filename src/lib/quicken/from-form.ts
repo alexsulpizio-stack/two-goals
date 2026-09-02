@@ -18,9 +18,13 @@ export type CompactImport = {
   error?: string;
   fileName?: string;
   transactionCount?: number;
+  monthsCovered?: number;
   monthlyIncome?: number;
   monthlyExpenses?: number;
   monthlyGiving?: number;
+  periodIncome?: number;
+  periodExpenses?: number;
+  periodGiving?: number;
   investedNetWorth?: number | null;
   startDate?: string | null;
   endDate?: string | null;
@@ -40,9 +44,13 @@ export function compactImport(result: ImportResult): CompactImport {
     ok: true,
     fileName: result.fileName,
     transactionCount: result.transactionCount,
+    monthsCovered: summary.monthsCovered,
     monthlyIncome: summary.monthlyIncome,
     monthlyExpenses: summary.monthlyExpenses,
     monthlyGiving: summary.monthlyGiving,
+    periodIncome: summary.periodIncome,
+    periodExpenses: summary.periodExpenses,
+    periodGiving: summary.periodGiving,
     investedNetWorth: summary.investedNetWorth,
     startDate: summary.startDate,
     endDate: summary.endDate,

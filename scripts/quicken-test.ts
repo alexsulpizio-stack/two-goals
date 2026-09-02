@@ -33,6 +33,18 @@ assert.equal(
 );
 assert.equal(classifyCategory("Groceries", -520, {}, undefined, "Bank"), "expense");
 assert.equal(classifyCategory("Amazon", 64.2, {}, undefined, "CCard"), "expense");
+assert.equal(
+  classifyCategory("Credit Card Payment", -2000, {}, undefined, "Bank"),
+  "transfer"
+);
+assert.equal(
+  classifyCategory("Payment", -2000, {}, undefined, "CCard", "Payment Thank You"),
+  "transfer"
+);
+assert.equal(
+  classifyCategory("Opening Balance", 12000, {}, undefined, "Bank", "Opening Balance"),
+  "ignore"
+);
 
 const qif = parseQifFile(
   "sample.qif",
@@ -172,5 +184,41 @@ const fromText = parseQuickenText(
 );
 assert.equal(fromText.ok, true);
 assert.equal(fromText.transactionCount, 1);
+
+const cardFile = parseQifFile(
+  "card.qif",
+  `!Type:Bank
+D1/15'25
+T5000.00
+PWork
+LSalary
+^
+D1/20'25
+T-2000.00
+PVisa
+LCredit Card Payment
+^
+D1/22'25
+T-100.00
+PKroger
+LGroceries
+^
+!Type:CCard
+D1/18'25
+T400.00
+PAmazon
+LShopping
+^
+D1/20'25
+T-2000.00
+PPayment
+LPayment
+^
+`
+);
+const cardSummary = summarizeQuicken(cardFile, 12);
+assert.equal(cardSummary.monthlyIncome, 5000);
+assert.equal(cardSummary.periodExpenses, 500);
+assert.equal(cardSummary.monthlyExpenses, 500);
 
 console.log("quicken tests passed");

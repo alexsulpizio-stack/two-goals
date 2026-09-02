@@ -79,7 +79,9 @@ export function ImportResultView({ data }: { data: CompactImport }) {
           {data.startDate && data.endDate
             ? ` · ${data.startDate} to ${data.endDate}`
             : ""}
-          . These are 12-month monthly averages.
+          . Monthly figures are the totals in that span divided by{" "}
+          {data.monthsCovered ?? 12} months — not a single paycheck, and not
+          credit-card payments stacked on top of the charges.
         </p>
       </section>
 
@@ -90,18 +92,29 @@ export function ImportResultView({ data }: { data: CompactImport }) {
             Apply these to the ledger
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 pt-5 sm:grid-cols-2">
-          <Metric label="Monthly income" value={formatMoney(data.monthlyIncome ?? 0)} />
-          <Metric label="Monthly living" value={formatMoney(data.monthlyExpenses ?? 0)} />
-          <Metric label="Monthly giving" value={formatMoney(data.monthlyGiving ?? 0)} />
-          <Metric
-            label="Invested net worth"
-            value={
-              data.investedNetWorth == null
-                ? "Not in file"
-                : formatMoney(data.investedNetWorth)
-            }
-          />
+        <CardContent className="flex flex-col gap-4 pt-5">
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <Metric
+              label={`Income in span / monthly`}
+              value={`${formatMoney(data.periodIncome ?? 0)} · ${formatMoney(data.monthlyIncome ?? 0)}/mo`}
+            />
+            <Metric
+              label={`Living in span / monthly`}
+              value={`${formatMoney(data.periodExpenses ?? 0)} · ${formatMoney(data.monthlyExpenses ?? 0)}/mo`}
+            />
+            <Metric
+              label={`Giving in span / monthly`}
+              value={`${formatMoney(data.periodGiving ?? 0)} · ${formatMoney(data.monthlyGiving ?? 0)}/mo`}
+            />
+            <Metric
+              label="Invested net worth"
+              value={
+                data.investedNetWorth == null
+                  ? "Not in file — type it on Steward"
+                  : formatMoney(data.investedNetWorth)
+              }
+            />
+          </dl>
         </CardContent>
       </Card>
 
