@@ -39,8 +39,9 @@ export function QuickenImport({
   const pasteRef = useRef<HTMLTextAreaElement>(null);
   const loadedRef = useRef<LoadedFile | null>(null);
   const runId = useRef(0);
+  const seenToken = useRef("");
 
-  const [chosen, setChosen] = useState<string>("No file loaded yet.");
+  const [chosen, setChosen] = useState("No file loaded yet. Choose the .qif below.");
   const [payload, setPayload] = useState<ImportResult | null>(null);
   const [pending, setPending] = useState(false);
   const [windowMonths, setWindowMonths] = useState<WindowMonths>(12);
@@ -88,65 +89,67 @@ export function QuickenImport({
     }
   }, []);
 
+  const ingestFromPicker = useCallback(
+    (reason: string, force = false) => {
+      const file = pickerFile(fileRef.current);
+      if (!file) return false;
+      const token = `${file.name}:${file.size}:${file.lastModified}`;
+      if (!force && token === seenToken.current) return true;
+      seenToken.current = token;
+      void ingestBlob(file, file.name, reason);
+      return true;
+    },
+    [ingestBlob]
+  );
+
   useEffect(() => {
-    const input = fileRef.current;
-    if (!input) return;
-    const onChange = () => {
-      const file = input.files?.[0];
-      if (file) void ingestBlob(file, file.name, "Chosen");
-    };
-    input.addEventListener("change", onChange);
-    input.addEventListener("input", onChange);
-    return () => {
-      input.removeEventListener("change", onChange);
-      input.removeEventListener("input", onChange);
-    };
-  }, [ingestBlob]);
+    if (!hydrated) return;
+    ingestFromPicker("Picker");
+    const timer = window.setInterval(() => ingestFromPicker("Picker"), 200);
+    return () => window.clearInterval(timer);
+  }, [hydrated, ingestFromPicker]);
 
   async function readFile() {
-    const id = ++runId.current;
+    const live = pickerFile(fileRef.current);
     flushSync(() => {
       setPending(true);
       setApplied(false);
+      setChosen(
+        live
+          ? `Read file clicked · ${live.name}`
+          : "Read file clicked · the picker did not hand over a file"
+      );
     });
     await yieldToPaint();
-    try {
-      const live = fileRef.current?.files?.[0];
-      if (live) {
-        const buffer = await readAsArrayBuffer(live);
-        if (id !== runId.current) return;
-        loadedRef.current = {
-          name: live.name,
-          size: buffer.byteLength,
-          buffer,
-        };
-        setChosen(`Loaded ${live.name} · ${formatBytes(buffer.byteLength)}`);
-      }
+    if (live) {
+      seenToken.current = `${live.name}:${live.size}:${live.lastModified}`;
+      await ingestBlob(live, live.name, "Read file");
+      return;
+    }
 
-      const loaded = loadedRef.current;
-      const paste = pasteRef.current?.value?.trim() ?? "";
-      if (!loaded && !paste) {
-        setPayload({
-          ok: false,
-          error:
-            "Read file ran, but the QIF was not in memory yet. Choose the file again, wait until it says Loaded, then click Read file.",
-        });
+    const loaded = loadedRef.current;
+    const paste = pasteRef.current?.value?.trim() ?? "";
+    try {
+      if (paste) {
+        setPayload(parseQuickenText("pasted.qif", paste));
         return;
       }
-
-      await yieldToPaint();
-      const result = paste
-        ? parseQuickenText("pasted.qif", paste)
-        : await parseQuickenBytes(loaded!.name, loaded!.buffer);
-      if (id !== runId.current) return;
-      setPayload(result);
+      if (loaded) {
+        setChosen(`Loaded ${loaded.name} · ${formatBytes(loaded.size)}`);
+        setPayload(await parseQuickenBytes(loaded.name, loaded.buffer));
+        return;
+      }
+      setPayload({
+        ok: false,
+        error:
+          "The browser can show a filename without giving Steward the file. Click Choose File again, pick 2025data, and wait until this line says Loaded. Or drop the file on this box, or use Try a sample.",
+      });
     } catch (cause) {
-      if (id !== runId.current) return;
       const message =
         cause instanceof Error ? cause.message : "The file could not be read.";
       setPayload({ ok: false, error: `Read file ran, then failed: ${message}` });
     } finally {
-      if (id === runId.current) setPending(false);
+      setPending(false);
     }
   }
 
@@ -227,7 +230,7 @@ export function QuickenImport({
       ? `Read ${payload.fileName}: ${payload.transactionCount} transactions. Totals are below.`
       : payload?.error
         ? payload.error
-        : "Choose a .qif (or drop it here). It should load on its own; Read file is a retry.";
+        : "Choose a .qif, drop it on this box, or Try a sample. The line above must say Loaded before totals appear.";
 
   return (
     <Card className="bg-card/80">
@@ -239,9 +242,9 @@ export function QuickenImport({
       </CardHeader>
       <CardContent className="flex flex-col gap-5 pt-5">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Choose the .qif. Steward loads it immediately and should show monthly
-          totals without a second click. If it does not, press Read file — that
-          button must report a result, even when parsing fails.
+          A filename next to Choose File is not enough — this page has to say
+          Loaded. If it does not, drop the file on the dashed box or Try a
+          sample.
         </p>
 
         <div
@@ -265,17 +268,24 @@ export function QuickenImport({
             if (file) void ingestBlob(file, file.name, "Drop");
           }}
         >
-          <label className="flex flex-col gap-2 text-sm font-medium">
-            File
-            <input
-              id="quicken-file-input"
-              ref={fileRef}
-              type="file"
-              name="quicken"
-              accept=".qif,.csv,.txt,.tsv,.QIF,.CSV"
-              className="block w-full cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
-            />
-          </label>
+          <div className="flex flex-col gap-2 text-sm font-medium">
+            <span>File</span>
+            {hydrated ? (
+              <input
+                id="quicken-file-input"
+                ref={fileRef}
+                type="file"
+                name="quicken"
+                accept=".qif,.csv,.txt,.tsv,.QIF,.CSV"
+                className="block w-full cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+                onChange={() => ingestFromPicker("Chosen", true)}
+              />
+            ) : (
+              <p className="text-sm font-normal text-muted-foreground">
+                Preparing the file picker…
+              </p>
+            )}
+          </div>
           <p className="text-sm font-medium" data-testid="chosen-file">
             {chosen}
           </p>
@@ -315,8 +325,8 @@ export function QuickenImport({
             {showPaste ? "Hide paste box" : "Paste QIF text instead"}
           </button>
           {showPaste ? (
-            <label className="flex flex-col gap-2 text-sm font-medium">
-              Paste
+            <div className="flex flex-col gap-2 text-sm font-medium">
+              <span>Paste</span>
               <textarea
                 ref={pasteRef}
                 rows={5}
@@ -330,7 +340,7 @@ export function QuickenImport({
               >
                 Read pasted text
               </button>
-            </label>
+            </div>
           ) : null}
         </div>
 
@@ -447,6 +457,17 @@ export function QuickenImport({
       </CardContent>
     </Card>
   );
+}
+
+function pickerFile(ref: HTMLInputElement | null): File | null {
+  const input =
+    ref ??
+    (typeof document === "undefined"
+      ? null
+      : document.querySelector<HTMLInputElement>("#quicken-file-input"));
+  const file = input?.files?.[0];
+  if (!file) return null;
+  return file;
 }
 
 function yieldToPaint() {
