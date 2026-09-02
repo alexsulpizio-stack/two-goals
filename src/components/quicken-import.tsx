@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { FileSpreadsheet, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { todayKey } from "@/lib/dates";
 import { formatMoney } from "@/lib/finance";
 import {
   displayKind,
   mergeBundles,
   nextKind,
+  parseQuickenFile,
   readDroppedFile,
   summarizeQuicken,
 } from "@/lib/quicken";
@@ -33,44 +35,84 @@ export function QuickenImport({
   state: AppState;
   setState: (updater: (previous: AppState) => AppState) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const [bundle, setBundle] = useState<QuickenBundle | null>(null);
   const [windowMonths, setWindowMonths] = useState<WindowMonths>(12);
+  const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [paste, setPaste] = useState("");
+  const [selectedNames, setSelectedNames] = useState("");
 
   const summary = useMemo(() => {
     if (!bundle) return null;
     return summarizeQuicken(bundle, windowMonths, state.categoryOverrides);
   }, [bundle, windowMonths, state.categoryOverrides]);
 
-  async function ingestFiles(files: FileList | File[]) {
-    const list = [...files].filter(Boolean);
-    if (list.length === 0) return;
+  async function ingestFiles(files: File[]) {
+    const list = files.filter((file) => file && file.size >= 0);
+    if (list.length === 0) {
+      setError("No file was received. Try the visible file control, or paste the QIF text below.");
+      return;
+    }
     setBusy(true);
     setError("");
     setApplied(false);
+    setSelectedNames(list.map((file) => file.name).join(", "));
+    setStatus(`Reading ${list.map((file) => file.name).join(", ")}…`);
     try {
       const parsed = await Promise.all(list.map((file) => readDroppedFile(file)));
-      const merged = mergeBundles(parsed);
-      if (
-        merged.transactions.length === 0 &&
-        merged.accounts.length === 0
-      ) {
-        setBundle(merged);
-        setError(
-          merged.warnings[0] ??
-            "Nothing usable was found. Export a QIF file or a CSV report from Quicken."
-        );
-        return;
-      }
-      setBundle(merged);
-    } catch {
-      setError("The file could not be read in this browser.");
+      finishImport(mergeBundles(parsed));
+    } catch (cause) {
       setBundle(null);
+      setStatus("");
+      setError(
+        cause instanceof Error
+          ? `Could not read the file: ${cause.message}`
+          : "The file could not be read in this browser."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function finishImport(merged: QuickenBundle) {
+    setBundle(merged);
+    if (merged.transactions.length === 0 && merged.accounts.length === 0) {
+      setStatus("");
+      setError(
+        merged.warnings[0] ??
+          "The file opened, but no transactions were found. In Quicken use File → File Export → QIF file and include Transactions."
+      );
+      return;
+    }
+    setError("");
+    setStatus(
+      `Read ${merged.fileName}: ${merged.transactions.length} transaction${
+        merged.transactions.length === 1 ? "" : "s"
+      }. Scroll this card for the totals, then click Apply to the ledger.`
+    );
+  }
+
+  function parsePasted() {
+    if (!paste.trim()) {
+      setError("Paste the contents of your .qif file first.");
+      return;
+    }
+    setBusy(true);
+    setApplied(false);
+    setSelectedNames("pasted.qif");
+    setStatus("Reading pasted QIF…");
+    try {
+      finishImport(parseQuickenFile("pasted.qif", paste));
+    } catch (cause) {
+      setBundle(null);
+      setStatus("");
+      setError(
+        cause instanceof Error ? cause.message : "The pasted text could not be parsed."
+      );
     } finally {
       setBusy(false);
     }
@@ -97,8 +139,7 @@ export function QuickenImport({
         monthlyIncome: summary.monthlyIncome,
         monthlyExpenses: summary.monthlyExpenses,
         monthlyGiving: summary.monthlyGiving,
-        netWorth:
-          summary.investedNetWorth ?? previous.finance.netWorth,
+        netWorth: summary.investedNetWorth ?? previous.finance.netWorth,
       },
       snapshots:
         summary.investedNetWorth != null
@@ -115,6 +156,7 @@ export function QuickenImport({
       },
     }));
     setApplied(true);
+    setStatus("Applied to the ledger. The 6–12 month sprint above now uses these numbers.");
   }
 
   const visibleCategories = summary
@@ -122,6 +164,9 @@ export function QuickenImport({
         .filter((item) => item.kind !== "transfer")
         .slice(0, showAll ? undefined : 12)
     : [];
+
+  const showPreview =
+    Boolean(summary && bundle && (bundle.transactions.length > 0 || bundle.accounts.length > 0));
 
   return (
     <Card className="bg-card/80">
@@ -133,9 +178,9 @@ export function QuickenImport({
       </CardHeader>
       <CardContent className="flex flex-col gap-5 pt-5">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          There is no live Quicken login. Export a QIF file, or a Transaction
-          and Net Worth report saved as CSV, and drop them here. Parsing stays
-          on this device.
+          Export from Quicken, then choose the file below. After it is read you
+          should see monthly income, living, and giving in this same card. Then
+          click Apply to the ledger.
         </p>
 
         <details className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3 text-sm">
@@ -144,30 +189,20 @@ export function QuickenImport({
           </summary>
           <ol className="mt-3 flex list-decimal flex-col gap-2 pl-5 text-muted-foreground">
             <li>
-              <span className="text-foreground">Transactions:</span> File →
-              File Export → QIF file. Include Transactions, Account List, and
-              Category List. Or run a Transaction report and Export to Excel,
-              then save as CSV.
+              File → File Export → QIF file. Include Transactions, Account
+              List, and Category List.
             </li>
             <li>
-              <span className="text-foreground">Invested net worth:</span>{" "}
-              Reports → Net Worth → Export to Excel → save as CSV. House and
-              cars are left out of the FI number; cash, brokerages, and
-              retirement accounts are included.
-            </li>
-            <li>
-              Drop both files together. Quicken Simplifi: export transactions
-              as CSV from settings, same idea.
+              Optional for balances: Reports → Net Worth → Export to Excel →
+              save as CSV, and choose that file too.
             </li>
           </ol>
         </details>
 
         <div
           className={cn(
-            "flex flex-col items-center gap-3 rounded-2xl border border-dashed px-4 py-8 text-center transition-colors",
-            dragging
-              ? "border-steward bg-steward/5"
-              : "border-border bg-muted/30"
+            "flex flex-col items-stretch gap-4 rounded-2xl border border-dashed px-4 py-6 transition-colors",
+            dragging ? "border-steward bg-steward/5" : "border-border bg-muted/30"
           )}
           onDragOver={(event) => {
             event.preventDefault();
@@ -177,31 +212,26 @@ export function QuickenImport({
           onDrop={(event) => {
             event.preventDefault();
             setDragging(false);
-            void ingestFiles(event.dataTransfer.files);
+            void ingestFiles([...event.dataTransfer.files]);
           }}
         >
-          <Upload className="size-6 text-steward" />
-          <div>
-            <p className="font-medium">Drop QIF or CSV files</p>
-            <p className="text-sm text-muted-foreground">
-              .qif, .csv, or Excel saved as CSV
-            </p>
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Upload className="size-4 text-steward" />
+            Choose a .qif or .csv file
           </div>
-          <div className="flex flex-col items-center gap-3">
-            <label className="relative inline-flex h-10 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80">
-              Choose files
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".qif,.csv,.txt,.tsv,.qfx,.ofx"
-                multiple
-                className="absolute inset-0 cursor-pointer opacity-0"
-                onChange={(event) => {
-                  if (event.target.files) void ingestFiles(event.target.files);
-                  event.target.value = "";
-                }}
-              />
-            </label>
+          <input
+            type="file"
+            accept=".qif,.csv,.txt,.tsv,.QIF,.CSV,text/plain"
+            multiple
+            disabled={busy}
+            className="block w-full max-w-lg cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+            onChange={(event) => {
+              const files = [...(event.target.files ?? [])];
+              event.target.value = "";
+              void ingestFiles(files);
+            }}
+          />
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               disabled={busy}
@@ -214,11 +244,45 @@ export function QuickenImport({
               <FileSpreadsheet className="size-4" />
               Load sample
             </Button>
+            {selectedNames ? (
+              <p className="text-sm text-muted-foreground">Selected: {selectedNames}</p>
+            ) : null}
           </div>
+          <p className="text-xs text-muted-foreground">
+            You can also drop files onto this box, or paste QIF text below.
+          </p>
         </div>
 
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium">Or paste QIF text</p>
+          <Textarea
+            value={paste}
+            onChange={(event) => setPaste(event.target.value)}
+            placeholder={"!Type:Bank\nD3/15'26\nT-52.10\nPStore\nLGroceries\n^"}
+            className="min-h-28 font-mono text-xs"
+          />
+          <Button variant="outline" disabled={busy} onClick={parsePasted} className="self-start">
+            Parse pasted QIF
+          </Button>
+        </div>
+
+        {busy ? (
+          <p className="rounded-xl border border-steward/30 bg-steward/5 px-4 py-3 text-sm">
+            {status || "Reading…"}
+          </p>
+        ) : null}
+
+        {status && !busy ? (
+          <p
+            className="rounded-xl border border-steward/30 bg-steward/5 px-4 py-3 text-sm"
+            role="status"
+          >
+            {status}
+          </p>
+        ) : null}
+
         {error ? (
-          <p className="text-sm text-destructive" role="alert">
+          <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive" role="alert">
             {error}
           </p>
         ) : null}
@@ -226,17 +290,15 @@ export function QuickenImport({
         {hydrated && state.lastQuicken && !bundle ? (
           <p className="text-sm text-muted-foreground">
             Last applied: {state.lastQuicken.fileName} ·{" "}
-            {state.lastQuicken.transactionCount} transactions ·{" "}
-            {state.lastQuicken.windowMonths}-month average. Drop a new export
-            to refresh.
+            {state.lastQuicken.transactionCount} transactions.
           </p>
         ) : null}
 
-        {summary && bundle && (bundle.transactions.length > 0 || bundle.accounts.length > 0) ? (
+        {showPreview && summary && bundle ? (
           <div className="flex flex-col gap-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground">
-                {summary.fileName} · {summary.transactionCount} transactions
+                {summary.transactionCount} transactions
                 {summary.startDate && summary.endDate
                   ? ` · ${summary.startDate} to ${summary.endDate}`
                   : ""}
@@ -342,14 +404,16 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-async function loadSample(
-  ingest: (files: File[]) => Promise<void>
-) {
+async function loadSample(ingest: (files: File[]) => Promise<void>) {
   const [transactions, netWorth] = await Promise.all([
-    fetch("/samples/quicken-transactions.csv").then((response) =>
-      response.blob()
-    ),
-    fetch("/samples/quicken-net-worth.csv").then((response) => response.blob()),
+    fetch("/samples/quicken-transactions.csv").then((response) => {
+      if (!response.ok) throw new Error("Sample transaction file missing");
+      return response.blob();
+    }),
+    fetch("/samples/quicken-net-worth.csv").then((response) => {
+      if (!response.ok) throw new Error("Sample net worth file missing");
+      return response.blob();
+    }),
   ]);
   await ingest([
     new File([transactions], "quicken-transactions.csv", { type: "text/csv" }),

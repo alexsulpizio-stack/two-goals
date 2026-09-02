@@ -68,9 +68,9 @@ export function parseQifFile(fileName: string, text: string): QuickenBundle {
     splits.length = 0;
   };
 
-  const lines = stripBom(text).replace(/\r\n/g, "\n").split("\n");
+  const lines = stripBom(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
+    const line = rawLine.replace(/^\u0000+/, "").trimEnd();
     if (!line) continue;
     if (line.startsWith("!")) {
       flush();
@@ -79,10 +79,14 @@ export function parseQifFile(fileName: string, text: string): QuickenBundle {
         mode = "account";
       } else if (/^Type:Cat/i.test(header)) {
         mode = "cat";
+      } else if (/^Type:(Memorized|Prices|Security|Class|Budget|Tags?)/i.test(header)) {
+        mode = "none";
       } else if (/^Type:/i.test(header)) {
         mode = "txn";
         const type = header.slice(5).trim();
-        if (type && !accountType) accountType = type;
+        if (type) accountType = type;
+      } else if (/^(Option:|Clear:)/i.test(header)) {
+        continue;
       } else {
         mode = "none";
       }
@@ -127,7 +131,7 @@ function pushTransactions(
   const action = (record.N ?? "").trim();
   const payee = (record.P ?? record.Y ?? "").trim();
   const memo = (record.M ?? "").trim();
-  const parentAmount = parseAmount(record.T) ?? 0;
+  const parentAmount = parseAmount(record.T) ?? parseAmount(record.U) ?? 0;
 
   if (SKIP_INVESTMENT_ACTIONS.has(action.toLowerCase())) return;
 
@@ -149,7 +153,7 @@ function pushTransactions(
     return;
   }
 
-  if (parentAmount === 0 && !record.T) return;
+  if (parentAmount === 0 && !record.T && !record.U) return;
   transactions.push({
     date,
     amount: parentAmount,

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { classifyCategory } from "../src/lib/quicken/classify";
 import { parseCsvFile } from "../src/lib/quicken/csv";
 import { parseAmount, parseDate } from "../src/lib/quicken/money";
-import { parseQuickenFile } from "../src/lib/quicken/parse";
+import { decodeQuickenBytes, parseQuickenFile } from "../src/lib/quicken/parse";
 import { parseQifFile } from "../src/lib/quicken/qif";
 import { mergeBundles, summarizeQuicken } from "../src/lib/quicken/summarize";
 
@@ -91,5 +91,40 @@ assert.ok(qxf.warnings[0]?.includes("QIF"));
 
 const recategorized = summarizeQuicken(csv, 12, { Groceries: "giving" });
 assert.ok(recategorized.monthlyGiving > summary.monthlyGiving);
+
+assert.equal(parseDate("3/15'26"), "2026-03-15");
+assert.equal(parseDate("12/25'93"), "1993-12-25");
+
+const apostropheQif = parseQifFile(
+  "classic.qif",
+  "!Type:Bank\r\nD3/15'26\r\nT-52.10\r\nPStore\r\nLGroceries\r\n^\r\n"
+);
+assert.equal(apostropheQif.transactions.length, 1);
+assert.equal(apostropheQif.transactions[0]?.date, "2026-03-15");
+assert.equal(apostropheQif.transactions[0]?.amount, -52.1);
+
+const autoSwitch = parseQifFile(
+  "auto.qif",
+  `!Option:AutoSwitch
+!Account
+NChecking
+TBank
+^
+!Type:Bank
+D01/02/2026
+T100.00
+PPay
+LSalary
+^
+`
+);
+assert.equal(autoSwitch.accounts.length, 1);
+assert.equal(autoSwitch.transactions.length, 1);
+
+const utf16 = new Uint8Array([
+  0xff, 0xfe, 0x21, 0x00, 0x54, 0x00, 0x79, 0x00, 0x70, 0x00, 0x65, 0x00, 0x3a,
+  0x00, 0x42, 0x00, 0x61, 0x00, 0x6e, 0x00, 0x6b, 0x00, 0x0a, 0x00,
+]);
+assert.match(decodeQuickenBytes(utf16.buffer), /!Type:Bank/);
 
 console.log("quicken tests passed");

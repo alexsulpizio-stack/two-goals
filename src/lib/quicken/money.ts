@@ -40,6 +40,25 @@ export function parseDate(raw: string | undefined | null): string | null {
     return toIso(year, month, day);
   }
 
+  const apostrophe = text.match(/^(\d{1,2})[/-](\d{1,2})'(\d{2,4})$/);
+  if (apostrophe) {
+    const month = Number(apostrophe[1]);
+    const day = Number(apostrophe[2]);
+    let year = Number(apostrophe[3]);
+    if (year < 100) year += year >= 70 ? 1900 : 2000;
+    return toIso(year, month, day);
+  }
+
+  const dotted = text.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if (dotted) {
+    const first = Number(dotted[1]);
+    const second = Number(dotted[2]);
+    let year = Number(dotted[3]);
+    if (year < 100) year += year >= 70 ? 1900 : 2000;
+    if (first > 12) return toIso(year, second, first);
+    return toIso(year, first, second);
+  }
+
   return null;
 }
 
