@@ -64,6 +64,8 @@ export function ProgressRing({
         className={trackClassName ?? "stroke-muted"}
       />
       <circle
+        id="fi-progress-arc"
+        data-circumference={circumference}
         cx={size / 2}
         cy={size / 2}
         r={radius}

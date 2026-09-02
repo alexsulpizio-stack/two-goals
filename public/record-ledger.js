@@ -10,8 +10,8 @@
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  function todayKey() {
-    const date = new Date();
+  function todayKey(date) {
+    date = date instanceof Date ? date : new Date();
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
     return `${date.getFullYear()}-${month}-${day}`;
@@ -1062,6 +1062,7 @@
     paintHistory(state.snapshots);
     paintSaveNote(bucket.kind !== "none");
     paintMove();
+    paintLife();
     const status = document.getElementById("ledger-status");
     if (status && state.snapshots?.[0]) {
       const latest = state.snapshots[0];
@@ -1077,6 +1078,233 @@
     writeState(state);
     paintMove();
     window.dispatchEvent(new Event("two-goals-external"));
+  }
+
+  function lastNDates(n) {
+    const from = new Date();
+    return Array.from({ length: n }, (_, index) => {
+      const date = new Date(from);
+      date.setDate(from.getDate() - (n - 1 - index));
+      return todayKey(date);
+    });
+  }
+
+  function formatLongDate(date) {
+    date = date instanceof Date ? date : new Date();
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  const PRACTICE_KINDS = ["word", "prayer", "gathered", "neighbor"];
+  const CHECK_MARK =
+    '<svg viewBox="0 0 24 24" fill="none" class="size-3.5" aria-hidden="true"><path d="M5 12.5 10 17.5 19 7.5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /></svg>';
+
+  function emptyPractice() {
+    return { word: false, prayer: false, gathered: false, neighbor: false };
+  }
+
+  function paintNav() {
+    const path = window.location.pathname;
+    document.querySelectorAll("[data-nav]").forEach((link) => {
+      const href = link.getAttribute("data-nav");
+      const active = href === "/" ? path === "/" : path.startsWith(href || "///");
+      link.classList.toggle("bg-foreground", active);
+      link.classList.toggle("text-background", active);
+      link.classList.toggle("text-muted-foreground", !active);
+    });
+  }
+
+  function paintPracticeBoxes(state) {
+    const date = todayKey();
+    const day = { ...emptyPractice(), ...(state.practices?.[date] || {}) };
+    document.querySelectorAll("[data-practice]").forEach((button) => {
+      const kind = button.getAttribute("data-practice");
+      const checked = Boolean(kind && day[kind]);
+      button.setAttribute("aria-pressed", checked ? "true" : "false");
+      button.classList.toggle("border-faith/40", checked);
+      button.classList.toggle("bg-faith/5", checked);
+      const box = button.querySelector("[data-practice-box]");
+      if (box) {
+        box.classList.toggle("border-primary", checked);
+        box.classList.toggle("bg-primary", checked);
+        box.classList.toggle("text-primary-foreground", checked);
+        box.classList.toggle("border-input", !checked);
+        box.innerHTML = checked ? CHECK_MARK : "";
+      }
+    });
+    const kept = PRACTICE_KINDS.filter((kind) => day[kind]).length;
+    const abide = document.getElementById("abide-title");
+    if (abide) {
+      abide.textContent =
+        kept === 0
+          ? "Begin with Him"
+          : kept === PRACTICE_KINDS.length
+            ? "A full day of remaining"
+            : `${kept} of ${PRACTICE_KINDS.length} kept`;
+    }
+    const week = lastNDates(7);
+    PRACTICE_KINDS.forEach((kind) => {
+      const count = week.filter((dayKey) => state.practices?.[dayKey]?.[kind]).length;
+      document.querySelectorAll(`[data-week-count="${kind}"]`).forEach((node) => {
+        node.textContent = `${count} of 7`;
+      });
+    });
+    document.querySelectorAll("[data-week-dot]").forEach((dot) => {
+      const kind = dot.getAttribute("data-week-kind");
+      const dayKey = dot.getAttribute("data-week-date");
+      const on = Boolean(kind && dayKey && state.practices?.[dayKey]?.[kind]);
+      dot.classList.toggle("bg-faith", on);
+      dot.classList.toggle("bg-muted", !on);
+    });
+  }
+
+  function togglePractice(kind) {
+    if (!PRACTICE_KINDS.includes(kind)) return;
+    const state = readState();
+    const date = todayKey();
+    const day = { ...emptyPractice(), ...(state.practices?.[date] || {}) };
+    day[kind] = !day[kind];
+    state.practices = { ...(state.practices || {}), [date]: day };
+    writeState(state);
+    paintPracticeBoxes(state);
+    window.dispatchEvent(new Event("two-goals-external"));
+  }
+
+  function prayerRow(entry) {
+    const date = formatShortDate((entry.createdAt || "").slice(0, 10) || todayKey());
+    const blocks = [
+      entry.thanksgiving
+        ? `<p class="text-sm leading-relaxed"><span class="font-medium">Thanksgiving. </span><span class="text-muted-foreground">${escapeAttr(entry.thanksgiving)}</span></p>`
+        : "",
+      entry.petition
+        ? `<p class="text-sm leading-relaxed"><span class="font-medium">Petition. </span><span class="text-muted-foreground">${escapeAttr(entry.petition)}</span></p>`
+        : "",
+      entry.listening
+        ? `<p class="text-sm leading-relaxed"><span class="font-medium">Heard. </span><span class="text-muted-foreground">${escapeAttr(entry.listening)}</span></p>`
+        : "",
+    ].join("");
+    return `<li data-prayer-id="${escapeAttr(entry.id)}" class="flex flex-col gap-2 rounded-xl border border-border/80 p-4">
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-xs tracking-wide text-muted-foreground uppercase">${date}</p>
+        <button type="button" data-remove-prayer="${escapeAttr(entry.id)}" class="text-xs text-muted-foreground underline-offset-4 hover:text-destructive hover:underline">Remove</button>
+      </div>
+      ${blocks}
+    </li>`;
+  }
+
+  function paintPrayers(state) {
+    const list = document.getElementById("prayer-list");
+    const empty = document.getElementById("prayer-empty");
+    const title = document.getElementById("prayer-list-title");
+    const prayers = Array.isArray(state.prayers) ? state.prayers : [];
+    if (list) list.innerHTML = prayers.map(prayerRow).join("");
+    if (empty) empty.hidden = prayers.length > 0;
+    if (title) {
+      title.textContent =
+        prayers.length === 0 ? "Nothing written yet" : `${prayers.length} kept`;
+    }
+  }
+
+  function fieldText(id) {
+    const node = document.getElementById(id);
+    if (node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement) {
+      return node.value.trim();
+    }
+    return "";
+  }
+
+  let lastPrayerAt = 0;
+
+  function savePrayer() {
+    const now = Date.now();
+    if (now - lastPrayerAt < 400) return;
+    lastPrayerAt = now;
+    const thanksgiving = fieldText("thanksgiving");
+    const petition = fieldText("petition");
+    const listening = fieldText("listening");
+    const error = document.getElementById("prayer-error");
+    if (!thanksgiving && !petition && !listening) {
+      if (error) {
+        error.hidden = false;
+        error.textContent = "Write at least one line before you keep it.";
+      }
+      return;
+    }
+    if (error) error.hidden = true;
+    const entry = {
+      id: `prayer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: new Date().toISOString(),
+      thanksgiving,
+      petition,
+      listening,
+    };
+    const state = readState();
+    state.prayers = [entry, ...(Array.isArray(state.prayers) ? state.prayers : [])];
+    writeState(state);
+    ["thanksgiving", "petition", "listening"].forEach((id) => {
+      const node = document.getElementById(id);
+      if (node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement) {
+        node.value = "";
+      }
+    });
+    paintPrayers(state);
+    window.dispatchEvent(new Event("two-goals-external"));
+  }
+
+  function removePrayer(id) {
+    if (!id) return;
+    const state = readState();
+    state.prayers = (Array.isArray(state.prayers) ? state.prayers : []).filter(
+      (entry) => entry && entry.id !== id
+    );
+    writeState(state);
+    paintPrayers(state);
+    window.dispatchEvent(new Event("two-goals-external"));
+  }
+
+  function paintCompassMove() {
+    const title = document.getElementById("compass-move-title");
+    if (!title) return;
+    const finance = financeFromPage();
+    const plan = independencePlan(finance);
+    const sprint = sprintPlan(finance);
+    const move = nextMove(plan, sprint, finance);
+    title.textContent = plan.hasInputs ? move.headline : "No finish line yet";
+    const body = document.getElementById("compass-move-body");
+    if (body) {
+      if (plan.hasInputs) {
+        body.innerHTML = `${move.lines[0] ? `<p>${escapeAttr(move.lines[0])}</p>` : ""}<a href="/steward" class="text-sm font-medium underline-offset-4 hover:underline">Do this on Steward</a>`;
+      } else {
+        const deadline = formatMonthYear(addMonths(new Date(), finance.targetMonths === 6 ? 6 : 12));
+        body.innerHTML = `<p class="text-muted-foreground">Enter living and giving on Steward. Then it sizes the new income you still have to create by ${deadline}.</p>`;
+      }
+    }
+    const percent = document.getElementById("fi-percent");
+    if (percent) percent.textContent = `${Math.round((plan.progress || 0) * 100)}%`;
+    const arc = document.getElementById("fi-progress-arc");
+    if (arc) {
+      const circumference = Number(arc.getAttribute("data-circumference") || 0);
+      if (circumference > 0) {
+        arc.setAttribute(
+          "stroke-dashoffset",
+          String(circumference * (1 - Math.min(1, Math.max(0, plan.progress || 0))))
+        );
+      }
+    }
+  }
+
+  function paintLife() {
+    paintNav();
+    const state = readState();
+    paintPracticeBoxes(state);
+    paintPrayers(state);
+    paintCompassMove();
+    setText("compass-date", formatLongDate());
+    setText("walk-date", formatLongDate());
   }
 
   let lastDownloadAt = 0;
@@ -1114,10 +1342,22 @@
         event.stopPropagation();
         saveStream();
       }
-      if (target.closest("[data-stream-earning]")) {
+      if (target.closest("[data-save-prayer]")) {
         event.preventDefault();
         event.stopPropagation();
-        markStreamEarning();
+        savePrayer();
+      }
+      const removePrayerBtn = target.closest("[data-remove-prayer]");
+      if (removePrayerBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        removePrayer(removePrayerBtn.getAttribute("data-remove-prayer"));
+      }
+      const practice = target.closest("[data-practice]");
+      if (practice) {
+        event.preventDefault();
+        event.stopPropagation();
+        togglePractice(practice.getAttribute("data-practice"));
       }
       const remove = target.closest("[data-remove-income]");
       if (remove) {
@@ -1185,6 +1425,7 @@
   function boot() {
     restore();
     paintMove();
+    paintLife();
   }
 
   if (document.readyState === "loading") {
@@ -1193,14 +1434,15 @@
     boot();
   }
   window.addEventListener("pageshow", boot);
-  window.addEventListener("two-goals-external", paintMove);
+  window.addEventListener("two-goals-external", () => {
+    paintMove();
+    paintLife();
+  });
 
   // React hydration in this preview can wipe restored fields and the painted
   // move. Re-apply stored numbers (skip the field being typed) and repaint.
   setInterval(() => {
-    if (!document.getElementById("move-headline") && !document.getElementById("netWorth")) {
-      return;
-    }
     restore();
+    paintLife();
   }, 400);
 })();

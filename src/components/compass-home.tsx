@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 import { ProgressRing } from "@/components/mark";
@@ -11,7 +10,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useAppState } from "@/hooks/use-app-state";
 import { addMonths, formatLongDate, formatMonthYear, lastNDates, todayKey } from "@/lib/dates";
 import { independencePlan, sprintPlan } from "@/lib/finance";
@@ -28,7 +26,7 @@ const practices: { kind: PracticeKind; label: string; hint: string }[] = [
 ];
 
 export function CompassHome() {
-  const { state, hydrated, togglePractice } = useAppState();
+  const { state, hydrated } = useAppState();
   const today = todayKey();
   const verse = verseOfTheDay();
   const day = state.practices[today] ?? emptyPractice();
@@ -44,7 +42,10 @@ export function CompassHome() {
   return (
     <div className="flex flex-col gap-10">
       <section className="flex flex-col gap-5">
-        <p className="text-sm tracking-[0.18em] text-muted-foreground uppercase">
+        <p
+          id="compass-date"
+          className="text-sm tracking-[0.18em] text-muted-foreground uppercase"
+        >
           {hydrated ? formatLongDate() : "Today"}
         </p>
         <h1 className="font-heading max-w-3xl text-4xl leading-[1.1] text-balance sm:text-6xl">
@@ -94,7 +95,10 @@ export function CompassHome() {
         <Card className="bg-card/80">
           <CardHeader className="border-b">
             <CardDescription>Independence</CardDescription>
-            <CardTitle className="font-heading text-2xl">
+            <CardTitle
+              id="compass-move-title"
+              className="font-heading text-2xl"
+            >
               {plan.hasInputs ? move.headline : "No finish line yet"}
             </CardTitle>
           </CardHeader>
@@ -102,7 +106,7 @@ export function CompassHome() {
             <div className="text-steward relative">
               <ProgressRing value={hydrated ? plan.progress : 0} />
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-heading text-2xl">
+                <span id="fi-percent" className="font-heading text-2xl">
                   {hydrated ? Math.round(plan.progress * 100) : 0}%
                 </span>
                 <span className="text-[11px] tracking-wide text-muted-foreground uppercase">
@@ -110,16 +114,16 @@ export function CompassHome() {
                 </span>
               </div>
             </div>
-            <div className="flex flex-col gap-2 text-sm">
+            <div id="compass-move-body" className="flex flex-col gap-2 text-sm">
               {plan.hasInputs ? (
                 <>
                   {move.lines[0] ? <p>{move.lines[0]}</p> : null}
-                  <Link
+                  <a
                     href="/steward"
                     className="text-sm font-medium underline-offset-4 hover:underline"
                   >
                     Do this on Steward
-                  </Link>
+                  </a>
                 </>
               ) : (
                 <p className="text-muted-foreground">
@@ -136,7 +140,7 @@ export function CompassHome() {
         <Card className="bg-card/80">
           <CardHeader className="border-b">
             <CardDescription>Abide today</CardDescription>
-            <CardTitle className="font-heading text-2xl">
+            <CardTitle id="abide-title" className="font-heading text-2xl">
               {doneToday === 0
                 ? "Begin with Him"
                 : doneToday === practices.length
@@ -146,25 +150,21 @@ export function CompassHome() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3 pt-5">
             {practices.map((item) => (
-              <label
+              <button
                 key={item.kind}
-                className="flex cursor-pointer items-start gap-3 rounded-lg border border-transparent px-1 py-1.5 hover:border-border/80 hover:bg-muted/40"
-                onClick={(event) => {
-                  event.preventDefault();
-                  togglePractice(today, item.kind);
-                }}
+                type="button"
+                data-practice={item.kind}
+                aria-pressed={hydrated ? day[item.kind] : false}
+                className="flex cursor-pointer items-start gap-3 rounded-lg border border-transparent px-1 py-1.5 text-left hover:border-border/80 hover:bg-muted/40"
               >
-                <Checkbox
-                  checked={hydrated ? day[item.kind] : false}
-                  className="pointer-events-none mt-0.5"
-                />
+                <PracticeBox checked={hydrated ? day[item.kind] : false} />
                 <span>
                   <span className="block font-medium">{item.label}</span>
                   <span className="text-sm text-muted-foreground">
                     {item.hint}
                   </span>
                 </span>
-              </label>
+              </button>
             ))}
           </CardContent>
         </Card>
@@ -218,7 +218,7 @@ function GoalPanel({
   cta: string;
 }) {
   return (
-    <Link
+    <a
       href={href}
       className={cn(
         "group flex flex-col justify-between gap-8 rounded-2xl p-6 text-white shadow-sm ring-1 ring-black/5 transition-transform sm:p-8",
@@ -240,7 +240,7 @@ function GoalPanel({
         {cta}
         <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
       </span>
-    </Link>
+    </a>
   );
 }
 
@@ -261,13 +261,21 @@ function WeekStrip({
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
         <p className="text-sm font-medium">{label}</p>
-        <p className="text-sm text-muted-foreground">{count} of 7</p>
+        <p
+          data-week-count={label.toLowerCase()}
+          className="text-sm text-muted-foreground"
+        >
+          {count} of 7
+        </p>
       </div>
       <div className="flex gap-2">
         {dates.map((date, index) => (
           <span
             key={date}
             title={date}
+            data-week-dot=""
+            data-week-kind={label === "Word" ? "word" : "prayer"}
+            data-week-date={date}
             className={cn(
               "h-2.5 flex-1 rounded-full",
               active[index]
@@ -280,5 +288,31 @@ function WeekStrip({
         ))}
       </div>
     </div>
+  );
+}
+
+function PracticeBox({ checked }: { checked: boolean }) {
+  return (
+    <span
+      data-practice-box=""
+      className={cn(
+        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-[4px] border",
+        checked
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-input bg-transparent"
+      )}
+    >
+      {checked ? (
+        <svg viewBox="0 0 24 24" fill="none" className="size-3.5" aria-hidden="true">
+          <path
+            d="M5 12.5 10 17.5 19 7.5"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : null}
+    </span>
   );
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Mark } from "@/components/mark";
@@ -18,10 +17,10 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5 text-foreground">
+        <a href="/" className="flex items-center gap-2.5 text-foreground">
           <Mark className="size-8 text-faith" />
           <span className="font-heading text-xl tracking-tight">Two Goals</span>
-        </Link>
+        </a>
         <nav className="flex items-center gap-1 rounded-full border border-border/80 bg-card/80 p-1">
           {links.map((link) => {
             const active =
@@ -29,9 +28,10 @@ export function SiteHeader() {
                 ? pathname === "/"
                 : pathname.startsWith(link.href);
             return (
-              <Link
+              <a
                 key={link.href}
                 href={link.href}
+                data-nav={link.href}
                 className={cn(
                   "rounded-full px-3.5 py-1.5 text-sm transition-colors",
                   active
@@ -40,7 +40,7 @@ export function SiteHeader() {
                 )}
               >
                 {link.label}
-              </Link>
+              </a>
             );
           })}
         </nav>
