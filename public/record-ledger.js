@@ -1,6 +1,7 @@
 (() => {
   const KEY = "two-goals:v1";
-  const FIELD_IDS = ["netWorth", "monthlyIncome", "monthlyExpenses", "monthlyGiving"];
+  const FIELD_IDS = ["netWorth", "monthlyExpenses", "monthlyGiving"];
+  const INCOME_HINTS = ["Day job", "Side work", "Rental", "Freelance", "Business"];
 
   function parseMoney(raw) {
     const trimmed = String(raw ?? "").trim();
@@ -84,6 +85,7 @@
         monthlyIncome: 0,
         monthlyExpenses: 0,
         monthlyGiving: 0,
+        incomeSources: [{ id: "income-1", name: "", monthly: 0 }],
         expectedReturn: 5,
         swr: 4,
         targetMonths: 12,
@@ -137,16 +139,207 @@
     }
   }
 
+  function newIncomeId() {
+    return `income-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  function normalizeIncomeSources(finance) {
+    const raw = Array.isArray(finance?.incomeSources) ? finance.incomeSources : [];
+    const parsed = [];
+    const seen = new Set();
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const id = typeof item.id === "string" && item.id ? item.id : null;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      parsed.push({
+        id,
+        name: typeof item.name === "string" ? item.name.trim().slice(0, 80) : "",
+        monthly: parseMoney(item.monthly),
+      });
+    }
+    if (parsed.length > 0) return parsed;
+    const monthly = parseMoney(finance?.monthlyIncome);
+    if (monthly > 0) {
+      return [{ id: "income-legacy", name: "Take-home", monthly }];
+    }
+    return [{ id: "income-1", name: "", monthly: 0 }];
+  }
+
+  function totalIncome(sources) {
+    return (sources || []).reduce((sum, source) => sum + Math.max(0, source.monthly || 0), 0);
+  }
+
+  function namedSources(sources) {
+    return (sources || []).filter(
+      (source) => (source.monthly || 0) > 0 || (source.name || "").length > 0
+    );
+  }
+
+  function incomeFocused() {
+    const el = document.activeElement;
+    return el instanceof HTMLElement && Boolean(el.closest("#income-sources"));
+  }
+
+  function isIncomeInput(input) {
+    return input.hasAttribute("data-income-name") || input.hasAttribute("data-income-amount");
+  }
+
+  function readIncomeSources() {
+    const rows = document.querySelectorAll("[data-income-source]");
+    return Array.from(rows).map((row, index) => {
+      const nameInput = row.querySelector("[data-income-name]");
+      const amountInput = row.querySelector("[data-income-amount]");
+      return {
+        id: row.getAttribute("data-income-id") || `income-${index + 1}`,
+        name:
+          nameInput instanceof HTMLInputElement ? nameInput.value.trim().slice(0, 80) : "",
+        monthly: parseMoney(amountInput instanceof HTMLInputElement ? amountInput.value : ""),
+      };
+    });
+  }
+
+  function incomeRowHtml(source, index) {
+    const amount = source.monthly ? String(source.monthly) : "";
+    const name = source.name || "";
+    const hint = INCOME_HINTS[index % INCOME_HINTS.length];
+    const removeHidden = "";
+    return `<div data-income-source="" data-income-id="${source.id}" class="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <input data-income-name="" name="income-name-${source.id}" placeholder="${hint}" value="${escapeAttr(name)}" aria-label="Income source ${index + 1} name" class="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base sm:flex-[1.2] md:text-sm" />
+      <div class="relative sm:flex-1">
+        <span class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+        <input data-income-amount="" name="income-amount-${source.id}" inputmode="decimal" placeholder="0" value="${escapeAttr(amount)}" aria-label="Income source ${index + 1} amount" class="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent py-1 pr-2.5 pl-6 text-base md:text-sm" />
+      </div>
+      <button type="button" data-remove-income="" ${removeHidden} class="h-8 shrink-0 text-sm text-muted-foreground underline-offset-4 hover:underline">Remove</button>
+    </div>`;
+  }
+
+  function escapeAttr(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
+  }
+
+  function paintIncomeMeta(sources) {
+    const filled = sources.filter((source) => source.monthly > 0);
+    const total = totalIncome(sources);
+    const note = document.getElementById("income-total");
+    if (note) {
+      note.textContent =
+        total > 0
+          ? `This month’s take-home: ${formatMoney(total)} from ${filled.length || sources.length} ${filled.length === 1 ? "source" : "sources"}.`
+          : "Add every paycheck and side stream. Empty rows are ignored.";
+    }
+    const rows = document.querySelectorAll("[data-income-source]");
+    rows.forEach((row) => {
+      const button = row.querySelector("[data-remove-income]");
+      if (button instanceof HTMLElement) button.hidden = rows.length < 2;
+    });
+  }
+
+  function paintIncomeRows(sources) {
+    const list = document.getElementById("income-sources");
+    if (!list) return;
+    const next = sources.length > 0 ? sources : [{ id: "income-1", name: "", monthly: 0 }];
+    if (incomeFocused()) {
+      const rows = list.querySelectorAll("[data-income-source]");
+      rows.forEach((row, index) => {
+        const source = next[index];
+        if (!source) return;
+        const nameInput = row.querySelector("[data-income-name]");
+        const amountInput = row.querySelector("[data-income-amount]");
+        if (nameInput instanceof HTMLInputElement && document.activeElement !== nameInput) {
+          nameInput.value = source.name || "";
+        }
+        if (amountInput instanceof HTMLInputElement && document.activeElement !== amountInput) {
+          amountInput.value = source.monthly ? String(source.monthly) : "";
+        }
+      });
+      paintIncomeMeta(next);
+      return;
+    }
+    const current = readIncomeSources();
+    const same =
+      current.length === next.length &&
+      current.every((source, index) => source.id === next[index]?.id);
+    if (same) {
+      const rows = list.querySelectorAll("[data-income-source]");
+      next.forEach((source, index) => {
+        const row = rows[index];
+        if (!row) return;
+        const nameInput = row.querySelector("[data-income-name]");
+        const amountInput = row.querySelector("[data-income-amount]");
+        if (nameInput instanceof HTMLInputElement) nameInput.value = source.name || "";
+        if (amountInput instanceof HTMLInputElement) {
+          amountInput.value = source.monthly ? String(source.monthly) : "";
+        }
+      });
+    } else {
+      list.innerHTML = next.map((source, index) => incomeRowHtml(source, index)).join("");
+    }
+    paintIncomeMeta(next);
+  }
+
+  function addIncome() {
+    const sources = readIncomeSources();
+    sources.push({ id: newIncomeId(), name: "", monthly: 0 });
+    const state = readState();
+    state.finance = {
+      ...defaultState().finance,
+      ...state.finance,
+      incomeSources: sources,
+      monthlyIncome: totalIncome(sources),
+    };
+    writeState(state);
+    paintIncomeRows(sources);
+    paintMove();
+    window.dispatchEvent(new Event("two-goals-external"));
+    const names = document.querySelectorAll("[data-income-name]");
+    const last = names[names.length - 1];
+    if (last instanceof HTMLInputElement) last.focus();
+  }
+
+  function removeIncome(row) {
+    const id = row?.getAttribute("data-income-id");
+    let sources = readIncomeSources();
+    if (sources.length <= 1) {
+      sources = [{ id: sources[0]?.id || "income-1", name: "", monthly: 0 }];
+    } else {
+      sources = sources.filter((source) => source.id !== id);
+    }
+    const state = readState();
+    state.finance = {
+      ...defaultState().finance,
+      ...state.finance,
+      incomeSources: sources,
+      monthlyIncome: totalIncome(sources),
+    };
+    writeState(state);
+    paintIncomeRows(sources);
+    updateSurplus(readLedger());
+    paintMove();
+    window.dispatchEvent(new Event("two-goals-external"));
+  }
+
   function readLedger() {
+    const sources = readIncomeSources();
     const ledger = {
       netWorth: 0,
-      monthlyIncome: 0,
+      monthlyIncome: sources.length ? totalIncome(sources) : 0,
       monthlyExpenses: 0,
       monthlyGiving: 0,
+      incomeSources: sources,
     };
     for (const id of FIELD_IDS) {
       const input = document.getElementById(id);
       ledger[id] = parseMoney(input instanceof HTMLInputElement ? input.value : "");
+    }
+    if (!sources.length) {
+      const fallback = document.getElementById("monthlyIncome");
+      ledger.monthlyIncome = parseMoney(
+        fallback instanceof HTMLInputElement ? fallback.value : ""
+      );
     }
     return ledger;
   }
@@ -520,7 +713,7 @@
     return `<li class="flex flex-col gap-1 border-b border-border/60 py-2 last:border-0">
       <span class="text-muted-foreground">${formatShortDate(item.date)}</span>
       <span class="tabular-nums">${formatMoney(item.netWorth)} net</span>
-      <span class="text-xs text-muted-foreground tabular-nums">${formatMoney(item.monthlyIncome)} in · ${formatMoney(item.monthlyExpenses)} living · ${formatMoney(item.monthlyGiving)} giving</span>
+      <span class="text-xs text-muted-foreground tabular-nums">${formatMoney(item.monthlyIncome)} in${incomeHistorySuffix(item)} · ${formatMoney(item.monthlyExpenses)} living · ${formatMoney(item.monthlyGiving)} giving</span>
     </li>`;
   }
 
@@ -557,14 +750,36 @@
         : `This month the barn is emptying by ${formatMoney(Math.abs(amount))}.`;
   }
 
+  function incomeHistorySuffix(item) {
+    const sources = namedSources(item.incomeSources).filter((source) => source.monthly > 0);
+    if (sources.length <= 1) return "";
+    const parts = sources
+      .map((source) => `${source.name || "Income"} ${formatMoney(source.monthly)}`)
+      .join(" · ");
+    return ` (${parts})`;
+  }
+
   function emptyLedger(ledger) {
-    return FIELD_IDS.every((id) => ledger[id] === 0);
+    return (
+      ledger.netWorth === 0 &&
+      ledger.monthlyIncome === 0 &&
+      ledger.monthlyExpenses === 0 &&
+      ledger.monthlyGiving === 0
+    );
   }
 
   function saveLedger(makeSnapshot) {
     const ledger = readLedger();
     const state = readState();
-    state.finance = { ...defaultState().finance, ...state.finance, ...ledger };
+    state.finance = {
+      ...defaultState().finance,
+      ...state.finance,
+      ...ledger,
+      incomeSources: ledger.incomeSources?.length
+        ? ledger.incomeSources
+        : normalizeIncomeSources({ ...state.finance, ...ledger }),
+      monthlyIncome: ledger.monthlyIncome,
+    };
     if (makeSnapshot && !emptyLedger(ledger)) {
       const date = todayKey();
       const snapshot = { date, ...ledger };
@@ -603,7 +818,12 @@
 
   function restore() {
     const state = readState();
-    const finance = { ...defaultState().finance, ...state.finance };
+    const finance = {
+      ...defaultState().finance,
+      ...state.finance,
+      incomeSources: normalizeIncomeSources(state.finance),
+    };
+    finance.monthlyIncome = totalIncome(finance.incomeSources);
     for (const id of FIELD_IDS) {
       const input = document.getElementById(id);
       if (!(input instanceof HTMLInputElement)) continue;
@@ -611,6 +831,7 @@
       const value = finance[id];
       input.value = value ? String(value) : "";
     }
+    paintIncomeRows(finance.incomeSources);
     updateSurplus(finance);
     paintHistory(state.snapshots);
     paintSaveNote(bucket.kind !== "none");
@@ -657,6 +878,17 @@
       if (!(target instanceof Element)) return;
       if (target.closest("[data-record-ledger]")) record();
       if (target.closest("[data-download-ledger]")) downloadHistory();
+      if (target.closest("[data-add-income]")) {
+        event.preventDefault();
+        event.stopPropagation();
+        addIncome();
+      }
+      const remove = target.closest("[data-remove-income]");
+      if (remove) {
+        event.preventDefault();
+        event.stopPropagation();
+        removeIncome(remove.closest("[data-income-source]"));
+      }
       const monthsButton = target.closest("[data-target-months]");
       if (monthsButton) {
         event.preventDefault();
@@ -671,8 +903,9 @@
     "input",
     (event) => {
       if (!(event.target instanceof HTMLInputElement)) return;
-      if (!FIELD_IDS.includes(event.target.id)) return;
+      if (!FIELD_IDS.includes(event.target.id) && !isIncomeInput(event.target)) return;
       const ledger = readLedger();
+      paintIncomeMeta(ledger.incomeSources);
       updateSurplus(ledger);
       paintMove();
     },
@@ -683,7 +916,7 @@
     "focusout",
     (event) => {
       if (!(event.target instanceof HTMLInputElement)) return;
-      if (!FIELD_IDS.includes(event.target.id)) return;
+      if (!FIELD_IDS.includes(event.target.id) && !isIncomeInput(event.target)) return;
       saveLedger(true);
     },
     true
@@ -692,7 +925,7 @@
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Enter") return;
     if (!(event.target instanceof HTMLInputElement)) return;
-    if (!FIELD_IDS.includes(event.target.id)) return;
+    if (!FIELD_IDS.includes(event.target.id) && !isIncomeInput(event.target)) return;
     event.preventDefault();
     record();
   });

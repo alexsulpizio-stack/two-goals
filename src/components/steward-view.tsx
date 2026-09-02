@@ -16,12 +16,20 @@ import { Slider } from "@/components/ui/slider";
 import { useAppState } from "@/hooks/use-app-state";
 import { formatShortDate, todayKey } from "@/lib/dates";
 import {
+  incomeBreakdown,
   LEDGER_FIELDS,
   ledgerFromFinance,
   monthlySurplus,
   upsertTodaySnapshot,
   type LedgerSnapshot,
 } from "@/lib/ledger";
+import {
+  incomeHint,
+  namedIncomeSources,
+  normalizeIncomeSources,
+  totalMonthlyIncome,
+  type IncomeSource,
+} from "@/lib/income";
 import { SprintBoard } from "@/components/sprint-plan";
 import {
   formatDuration,
@@ -31,11 +39,8 @@ import {
 } from "@/lib/finance";
 import type { FinanceInputs, SprintMonths } from "@/lib/types";
 
-const fields: {
-  key: keyof Pick<
-    FinanceInputs,
-    "netWorth" | "monthlyIncome" | "monthlyExpenses" | "monthlyGiving"
-  >;
+const moneyFields: {
+  key: "netWorth" | "monthlyExpenses" | "monthlyGiving";
   label: string;
   hint: string;
 }[] = [
@@ -43,11 +48,6 @@ const fields: {
     key: "netWorth",
     label: "Invested net worth",
     hint: "Starting line. Independence is this number reaching the nest egg the sprint names.",
-  },
-  {
-    key: "monthlyIncome",
-    label: "Monthly income",
-    hint: "How fast the nest egg can grow. The sprint asks if this, minus living and giving, is enough in time.",
   },
   {
     key: "monthlyExpenses",
@@ -103,21 +103,58 @@ export function StewardView() {
     return parseMoney(draft?.[id], fallback);
   }
 
+  function sourcesFromDom(): IncomeSource[] {
+    if (typeof document === "undefined") {
+      return normalizeIncomeSources(state.finance);
+    }
+    const rows = document.querySelectorAll("[data-income-source]");
+    if (rows.length === 0) return normalizeIncomeSources(state.finance);
+    return Array.from(rows).map((row, index) => {
+      const nameInput = row.querySelector("[data-income-name]");
+      const amountInput = row.querySelector("[data-income-amount]");
+      return {
+        id: row.getAttribute("data-income-id") || `income-${index + 1}`,
+        name: nameInput instanceof HTMLInputElement ? nameInput.value.trim() : "",
+        monthly: parseMoney(
+          amountInput instanceof HTMLInputElement ? amountInput.value : "",
+          0
+        ),
+      };
+    });
+  }
+
   function ledgerFromDom(): LedgerSnapshot {
-    const date = todayKey();
+    const incomeSources = sourcesFromDom();
     return {
-      date,
+      date: todayKey(),
       netWorth: fieldFromDom("netWorth", state.finance.netWorth),
-      monthlyIncome: fieldFromDom("monthlyIncome", state.finance.monthlyIncome),
+      monthlyIncome: totalMonthlyIncome(incomeSources),
       monthlyExpenses: fieldFromDom("monthlyExpenses", state.finance.monthlyExpenses),
       monthlyGiving: fieldFromDom("monthlyGiving", state.finance.monthlyGiving),
+      incomeSources: namedIncomeSources(incomeSources),
     };
   }
 
-  function commitNumber(key: keyof FinanceInputs, raw: string) {
-    const next = parseMoney(raw, 0);
+  function commitFinance(patch: Partial<FinanceInputs>) {
     setState((previous) => {
-      const finance = { ...previous.finance, [key]: next };
+      const incomeSources = patch.incomeSources
+        ? patch.incomeSources
+        : sourcesFromDom();
+      const finance = {
+        ...previous.finance,
+        ...patch,
+        incomeSources,
+        monthlyIncome: totalMonthlyIncome(incomeSources),
+      };
+      if (patch.monthlyExpenses !== undefined || patch.monthlyGiving !== undefined || patch.netWorth !== undefined) {
+        finance.netWorth = patch.netWorth ?? fieldFromDom("netWorth", previous.finance.netWorth);
+        finance.monthlyExpenses =
+          patch.monthlyExpenses ??
+          fieldFromDom("monthlyExpenses", previous.finance.monthlyExpenses);
+        finance.monthlyGiving =
+          patch.monthlyGiving ??
+          fieldFromDom("monthlyGiving", previous.finance.monthlyGiving);
+      }
       return {
         ...previous,
         finance,
@@ -127,6 +164,11 @@ export function StewardView() {
         ),
       };
     });
+  }
+
+  function commitNumber(key: keyof FinanceInputs, raw: string) {
+    const next = parseMoney(raw, 0);
+    commitFinance({ [key]: next } as Partial<FinanceInputs>);
     setDraft((previous) => {
       if (!previous || !(key in previous)) return previous;
       const copy = { ...previous };
@@ -158,6 +200,10 @@ export function StewardView() {
         monthlyIncome: snapshot.monthlyIncome,
         monthlyExpenses: snapshot.monthlyExpenses,
         monthlyGiving: snapshot.monthlyGiving,
+        incomeSources:
+          snapshot.incomeSources && snapshot.incomeSources.length > 0
+            ? snapshot.incomeSources
+            : sourcesFromDom(),
       },
       snapshots: upsertTodaySnapshot(previous.snapshots, snapshot),
     }));
@@ -175,9 +221,10 @@ export function StewardView() {
           Independent in the next 6 to 12 months.
         </h1>
         <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
-          This page does not earn the money. It names the only three sizes that
-          hit the deadline: more invested each month, a lump sum now, or a
-          smaller living cost. Giving stays in the target. Pick one and do it.
+          This page does not earn the money. Name every income stream, then it
+          names the only three sizes that hit the deadline: more invested each
+          month, a lump sum now, or a smaller living cost. Giving stays in the
+          target. Pick one and do it.
         </p>
       </section>
 
@@ -204,42 +251,45 @@ export function StewardView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-5 pt-5">
-            {fields.map((field) => (
-              <div key={field.key} className="flex flex-col gap-2">
-                <Label htmlFor={field.key}>{field.label}</Label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">
-                    $
-                  </span>
-                  <Input
-                    id={field.key}
-                    name={field.key}
-                    inputMode="decimal"
-                    className="pl-6"
-                    placeholder="0"
-                    value={financeValue(field.key)}
-                    suppressHydrationWarning
-                    onChange={(event) =>
-                      setDraft((previous) => ({
-                        ...(previous ?? {}),
-                        [field.key]: event.target.value,
-                      }))
-                    }
-                    onBlur={(event) =>
-                      commitNumber(field.key, event.target.value)
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      event.preventDefault();
-                      recordSnapshot();
-                    }}
-                  />
-                </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {field.hint}
-                </p>
-              </div>
-            ))}
+            <MoneyField
+              field={moneyFields[0]!}
+              value={financeValue("netWorth")}
+              onChange={(value) =>
+                setDraft((previous) => ({ ...(previous ?? {}), netWorth: value }))
+              }
+              onBlur={(value) => commitNumber("netWorth", value)}
+              onEnter={() => recordSnapshot()}
+            />
+
+            <IncomeSourcesEditor
+              sources={normalizeIncomeSources(state.finance)}
+              total={totalMonthlyIncome(normalizeIncomeSources(state.finance))}
+            />
+
+            <MoneyField
+              field={moneyFields[1]!}
+              value={financeValue("monthlyExpenses")}
+              onChange={(value) =>
+                setDraft((previous) => ({
+                  ...(previous ?? {}),
+                  monthlyExpenses: value,
+                }))
+              }
+              onBlur={(value) => commitNumber("monthlyExpenses", value)}
+              onEnter={() => recordSnapshot()}
+            />
+            <MoneyField
+              field={moneyFields[2]!}
+              value={financeValue("monthlyGiving")}
+              onChange={(value) =>
+                setDraft((previous) => ({
+                  ...(previous ?? {}),
+                  monthlyGiving: value,
+                }))
+              }
+              onBlur={(value) => commitNumber("monthlyGiving", value)}
+              onEnter={() => recordSnapshot()}
+            />
 
             <div className="flex flex-col gap-3 border-t pt-5">
               <p id="ledger-surplus" className="text-sm">
@@ -401,8 +451,9 @@ export function StewardView() {
                   {formatMoney(item.netWorth)} net
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">
-                  {formatMoney(item.monthlyIncome)} in ·{" "}
-                  {formatMoney(item.monthlyExpenses)} living ·{" "}
+                  {formatMoney(item.monthlyIncome)} in
+                  {incomeBreakdown(item) ? ` (${incomeBreakdown(item)})` : ""}{" "}
+                  · {formatMoney(item.monthlyExpenses)} living ·{" "}
                   {formatMoney(item.monthlyGiving)} giving
                 </span>
               </li>
@@ -455,4 +506,123 @@ export function StewardView() {
 function sliderNumber(value: number | readonly number[], fallback: number) {
   if (typeof value === "number") return value;
   return value[0] ?? fallback;
+}
+
+function MoneyField({
+  field,
+  value,
+  onChange,
+  onBlur,
+  onEnter,
+}: {
+  field: (typeof moneyFields)[number];
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: (value: string) => void;
+  onEnter: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={field.key}>{field.label}</Label>
+      <div className="relative">
+        <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">
+          $
+        </span>
+        <Input
+          id={field.key}
+          name={field.key}
+          inputMode="decimal"
+          className="pl-6"
+          placeholder="0"
+          value={value}
+          suppressHydrationWarning
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={(event) => onBlur(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            onEnter();
+          }}
+        />
+      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">{field.hint}</p>
+    </div>
+  );
+}
+
+function IncomeSourcesEditor({
+  sources,
+  total,
+}: {
+  sources: IncomeSource[];
+  total: number;
+}) {
+  const rows = sources.length > 0 ? sources : [{ id: "income-1", name: "", monthly: 0 }];
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <Label>Monthly income</Label>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Wages, side work, rent — name each stream. The sprint uses the total.
+        </p>
+      </div>
+      <div id="income-sources" className="flex flex-col gap-3">
+        {rows.map((source, index) => (
+          <div
+            key={source.id}
+            data-income-source=""
+            data-income-id={source.id}
+            className="flex flex-col gap-2 sm:flex-row sm:items-center"
+          >
+            <Input
+              data-income-name=""
+              name={`income-name-${source.id}`}
+              placeholder={incomeHint(index)}
+              defaultValue={source.name}
+              suppressHydrationWarning
+              aria-label={`Income source ${index + 1} name`}
+              className="sm:flex-[1.2]"
+            />
+            <div className="relative sm:flex-1">
+              <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">
+                $
+              </span>
+              <Input
+                data-income-amount=""
+                name={`income-amount-${source.id}`}
+                inputMode="decimal"
+                className="pl-6"
+                placeholder="0"
+                defaultValue={source.monthly ? String(source.monthly) : ""}
+                suppressHydrationWarning
+                aria-label={`Income source ${index + 1} amount`}
+              />
+            </div>
+            <button
+              type="button"
+              data-remove-income=""
+              hidden={rows.length < 2}
+              className="h-8 shrink-0 text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          type="button"
+          data-add-income=""
+          className="inline-flex h-9 w-fit items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
+        >
+          Add another income
+        </button>
+        <p id="income-total" className="text-sm tabular-nums">
+          {total > 0
+            ? `This month’s take-home: ${formatMoney(total)} from ${rows.filter((row) => row.monthly > 0).length || rows.length} ${rows.filter((row) => row.monthly > 0).length === 1 ? "source" : "sources"}.`
+            : "Add every paycheck and side stream. Empty rows are ignored."}
+        </p>
+      </div>
+    </div>
+  );
 }

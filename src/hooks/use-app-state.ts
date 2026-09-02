@@ -4,6 +4,10 @@ import { useCallback, useSyncExternalStore } from "react";
 
 import { asLedgerSnapshots } from "@/lib/ledger";
 import {
+  normalizeIncomeSources,
+  totalMonthlyIncome,
+} from "@/lib/income";
+import {
   defaultState,
   emptyPractice,
   type AppState,
@@ -22,6 +26,7 @@ function asSprintMonths(value: unknown): SprintMonths {
 }
 
 function mergeState(parsed: Partial<AppState>): AppState {
+  const incomeSources = normalizeIncomeSources(parsed.finance);
   return {
     practices: parsed.practices ?? defaultState.practices,
     prayers: parsed.prayers ?? defaultState.prayers,
@@ -29,6 +34,8 @@ function mergeState(parsed: Partial<AppState>): AppState {
       ...defaultState.finance,
       ...parsed.finance,
       targetMonths: asSprintMonths(parsed.finance?.targetMonths),
+      incomeSources,
+      monthlyIncome: totalMonthlyIncome(incomeSources),
     },
     snapshots: asLedgerSnapshots(parsed.snapshots),
   };

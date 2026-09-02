@@ -1,4 +1,12 @@
-import type { FinanceInputs } from "./types";
+import {
+  asIncomeSources,
+  namedIncomeSources,
+  normalizeIncomeSources,
+  totalMonthlyIncome,
+} from "./income";
+import type { FinanceInputs, LedgerSnapshot } from "./types";
+
+export type { LedgerSnapshot };
 
 export const LEDGER_FIELDS = [
   "netWorth",
@@ -9,24 +17,22 @@ export const LEDGER_FIELDS = [
 
 export type LedgerField = (typeof LEDGER_FIELDS)[number];
 
-export type LedgerSnapshot = {
-  date: string;
-  netWorth: number;
-  monthlyIncome: number;
-  monthlyExpenses: number;
-  monthlyGiving: number;
-};
-
 export function asLedgerSnapshot(item: unknown): LedgerSnapshot | null {
   if (!item || typeof item !== "object") return null;
-  const row = item as Partial<LedgerSnapshot>;
+  const row = item as Partial<LedgerSnapshot> & { incomeSources?: unknown };
   if (typeof row.date !== "string" || row.date.length < 8) return null;
+  const incomeSources = namedIncomeSources(asIncomeSources(row.incomeSources));
+  const monthlyIncome =
+    incomeSources.length > 0
+      ? totalMonthlyIncome(incomeSources)
+      : asMoney(row.monthlyIncome);
   return {
     date: row.date,
     netWorth: asMoney(row.netWorth),
-    monthlyIncome: asMoney(row.monthlyIncome),
+    monthlyIncome,
     monthlyExpenses: asMoney(row.monthlyExpenses),
     monthlyGiving: asMoney(row.monthlyGiving),
+    ...(incomeSources.length > 0 ? { incomeSources } : {}),
   };
 }
 
@@ -38,12 +44,14 @@ export function asLedgerSnapshots(items: unknown): LedgerSnapshot[] {
 }
 
 export function ledgerFromFinance(finance: FinanceInputs, date: string): LedgerSnapshot {
+  const incomeSources = namedIncomeSources(normalizeIncomeSources(finance));
   return {
     date,
     netWorth: finance.netWorth,
-    monthlyIncome: finance.monthlyIncome,
+    monthlyIncome: totalMonthlyIncome(normalizeIncomeSources(finance)),
     monthlyExpenses: finance.monthlyExpenses,
     monthlyGiving: finance.monthlyGiving,
+    ...(incomeSources.length > 0 ? { incomeSources } : {}),
   };
 }
 
@@ -106,6 +114,22 @@ export function snapshotDelta(
     netWorthChange: newestRow.netWorth - oldestRow.netWorth,
     surplusChange: newest.surplus - oldest.surplus,
   };
+}
+
+export function incomeBreakdown(snapshot: LedgerSnapshot): string {
+  const sources = snapshot.incomeSources?.filter((source) => source.monthly > 0) ?? [];
+  if (sources.length <= 1) return "";
+  return sources
+    .map((source) => `${source.name || "Income"} ${formatMoneyPlain(source.monthly)}`)
+    .join(" · ");
+}
+
+function formatMoneyPlain(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: Math.abs(amount) >= 1000 ? 0 : 2,
+  }).format(amount);
 }
 
 function asMoney(value: unknown) {

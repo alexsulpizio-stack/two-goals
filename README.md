@@ -36,6 +36,6 @@ Years remaining assume monthly savings keep going and invested assets earn the r
 
 The 6- and 12-month sprint then asks the reverse question: what monthly surplus, lump sum today, or living-cost ceiling would actually hit that FI number inside the window. Cutting living costs is double-powerful — you save more and you need a smaller nest egg.
 
-The ledger is not a diary. Steward always shows the move box and the three action sizes. As you type living, giving, income, and net worth, those sizes become dollars: more invested each month, a lump sum now, or a living ceiling. Giving stays in the target. History in this browser tells you whether the gap shrank. The page does not earn the money. You pick one move and do it.
+The ledger is not a diary. Steward always shows the move box and the three action sizes. Name every income stream — wages, side work, rent — then living, giving, and net worth. Those sizes become dollars: more invested each month, a lump sum now, or a living ceiling. Giving stays in the target. History in this browser tells you whether the gap shrank. The page does not earn the money. You pick one move and do it.
 
 This is a planning sketch, not advice. Scripture quotations are from the World English Bible (public domain).

@@ -1,3 +1,5 @@
+import type { IncomeSource } from "./income";
+
 export type PracticeKind = "word" | "prayer" | "gathered" | "neighbor";
 
 export type PracticeDay = Record<PracticeKind, boolean>;
@@ -17,6 +19,7 @@ export type FinanceInputs = {
   monthlyIncome: number;
   monthlyExpenses: number;
   monthlyGiving: number;
+  incomeSources: IncomeSource[];
   expectedReturn: number;
   swr: number;
   targetMonths: SprintMonths;
@@ -28,6 +31,7 @@ export type LedgerSnapshot = {
   monthlyIncome: number;
   monthlyExpenses: number;
   monthlyGiving: number;
+  incomeSources?: IncomeSource[];
 };
 
 export type NetWorthSnapshot = LedgerSnapshot;
@@ -51,6 +55,7 @@ export const defaultFinance: FinanceInputs = {
   monthlyIncome: 0,
   monthlyExpenses: 0,
   monthlyGiving: 0,
+  incomeSources: [{ id: "income-1", name: "", monthly: 0 }],
   expectedReturn: 5,
   swr: 4,
   targetMonths: 12,

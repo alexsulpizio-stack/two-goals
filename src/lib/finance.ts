@@ -1,4 +1,5 @@
 import type { FinanceInputs, SprintMonths } from "./types";
+import { namedIncomeSources, totalMonthlyIncome } from "./income";
 
 export const SPRINT_WINDOWS: SprintMonths[] = [6, 12];
 
@@ -31,23 +32,29 @@ export type SprintPlan = {
   cutsAloneInsufficient: boolean;
 };
 
+function resolvedMonthlyIncome(finance: FinanceInputs): number {
+  const sources = namedIncomeSources(finance.incomeSources ?? []);
+  return sources.length > 0
+    ? totalMonthlyIncome(finance.incomeSources)
+    : finance.monthlyIncome;
+}
+
 export function independencePlan(finance: FinanceInputs): IndependencePlan {
+  const monthlyIncome = resolvedMonthlyIncome(finance);
   const annualLiving = Math.max(0, finance.monthlyExpenses) * 12;
   const annualGiving = Math.max(0, finance.monthlyGiving) * 12;
   const annualSpend = annualLiving + annualGiving;
   const swr = finance.swr > 0 ? finance.swr / 100 : 0.04;
   const fiNumber = annualSpend > 0 ? annualSpend / swr : 0;
   const monthlySavings =
-    finance.monthlyIncome - finance.monthlyExpenses - finance.monthlyGiving;
+    monthlyIncome - finance.monthlyExpenses - finance.monthlyGiving;
   const savingsRate =
-    finance.monthlyIncome > 0 ? monthlySavings / finance.monthlyIncome : 0;
+    monthlyIncome > 0 ? monthlySavings / monthlyIncome : 0;
   const givingRate =
-    finance.monthlyIncome > 0
-      ? finance.monthlyGiving / finance.monthlyIncome
-      : 0;
+    monthlyIncome > 0 ? finance.monthlyGiving / monthlyIncome : 0;
   const hasInputs =
     finance.netWorth > 0 ||
-    finance.monthlyIncome > 0 ||
+    monthlyIncome > 0 ||
     finance.monthlyExpenses > 0 ||
     finance.monthlyGiving > 0;
 
@@ -262,6 +269,7 @@ export function sprintPlan(
   months: SprintMonths = finance.targetMonths
 ): SprintPlan {
   const plan = independencePlan(finance);
+  const monthlyIncome = resolvedMonthlyIncome(finance);
   const annualRate = finance.expectedReturn / 100;
   const present = Math.max(0, finance.netWorth);
   const projectedNetWorth = futureValue({
@@ -302,7 +310,7 @@ export function sprintPlan(
     reached || (plan.fiNumber > 0 && projectedNetWorth >= plan.fiNumber - 1);
   const maxMonthlyExpenses = maxExpensesForDeadline({
     netWorth: present,
-    monthlyIncome: finance.monthlyIncome,
+    monthlyIncome,
     monthlyGiving: finance.monthlyGiving,
     months,
     annualRate,
@@ -316,7 +324,7 @@ export function sprintPlan(
     requiredMonthlySavings +
     finance.monthlyExpenses +
     finance.monthlyGiving;
-  const incomeLift = Math.max(0, requiredMonthlyIncome - finance.monthlyIncome);
+  const incomeLift = Math.max(0, requiredMonthlyIncome - monthlyIncome);
 
   return {
     months,
