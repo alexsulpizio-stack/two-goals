@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { FileSpreadsheet, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,20 +10,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
 import { todayKey } from "@/lib/dates";
 import { formatMoney } from "@/lib/finance";
-import {
-  displayKind,
-  mergeBundles,
-  nextKind,
-  parseQuickenFile,
-  readDroppedFile,
-  summarizeQuicken,
-} from "@/lib/quicken";
-import type { QuickenBundle, WindowMonths } from "@/lib/quicken";
+import { displayKind, nextKind, retotalSummary } from "@/lib/quicken";
+import type { QuickenSummary, WindowMonths } from "@/lib/quicken";
 import type { AppState, LedgerKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+type ImportResponse = {
+  ok: boolean;
+  error?: string;
+  fileName?: string;
+  transactionCount?: number;
+  byWindow?: {
+    3: QuickenSummary;
+    12: QuickenSummary;
+  };
+};
 
 export function QuickenImport({
   hydrated,
@@ -35,98 +37,67 @@ export function QuickenImport({
   state: AppState;
   setState: (updater: (previous: AppState) => AppState) => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [bundle, setBundle] = useState<QuickenBundle | null>(null);
+  const noteRef = useRef<HTMLParagraphElement>(null);
   const [windowMonths, setWindowMonths] = useState<WindowMonths>(12);
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
-  const [dragging, setDragging] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [payload, setPayload] = useState<ImportResponse | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [applied, setApplied] = useState(false);
-  const [paste, setPaste] = useState("");
-  const [selectedNames, setSelectedNames] = useState("");
+  const [pending, setPending] = useState(false);
 
+  const rawSummary = payload?.ok ? payload.byWindow?.[windowMonths] ?? null : null;
   const summary = useMemo(() => {
-    if (!bundle) return null;
-    return summarizeQuicken(bundle, windowMonths, state.categoryOverrides);
-  }, [bundle, windowMonths, state.categoryOverrides]);
+    if (!rawSummary) return null;
+    return retotalSummary(rawSummary, state.categoryOverrides);
+  }, [rawSummary, state.categoryOverrides]);
 
-  async function ingestFiles(files: File[]) {
-    const list = files.filter((file) => file && file.size >= 0);
-    if (list.length === 0) {
-      setError("No file was received. Try the visible file control, or paste the QIF text below.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    setApplied(false);
-    setSelectedNames(list.map((file) => file.name).join(", "));
-    setStatus(`Reading ${list.map((file) => `${file.name} (${Math.max(1, Math.round(file.size / 1024))} KB)`).join(", ")}…`);
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-    try {
-      const parsed = await Promise.all(list.map((file) => readDroppedFile(file)));
-      finishImport(mergeBundles(parsed));
-    } catch (cause) {
-      setBundle(null);
-      setStatus("");
-      setError(
-        cause instanceof Error
-          ? `Could not read the file: ${cause.message}`
-          : "The file could not be read in this browser."
-      );
-    } finally {
-      setBusy(false);
-    }
+  function note(text: string) {
+    if (noteRef.current) noteRef.current.textContent = text;
   }
 
-  function finishImport(merged: QuickenBundle) {
-    setBundle(merged);
-    if (merged.transactions.length === 0 && merged.accounts.length === 0) {
-      setStatus("");
-      setError(
-        merged.warnings[0] ??
-          "The file opened, but no transactions were found. In Quicken use File → File Export → QIF file and include Transactions."
-      );
-      return;
-    }
-    setError("");
-    setStatus(
-      `Read ${merged.fileName}: ${merged.transactions.length} transaction${
-        merged.transactions.length === 1 ? "" : "s"
-      }. Scroll this card for the totals, then click Apply to the ledger.`
-    );
-  }
-
-  function parsePasted() {
-    if (!paste.trim()) {
-      setError("Paste the contents of your .qif file first.");
-      return;
-    }
-    setBusy(true);
+  async function submitForm(form: HTMLFormElement) {
+    note("Read file clicked. Uploading to the parser…");
+    setPending(true);
     setApplied(false);
-    setSelectedNames("pasted.qif");
-    setStatus("Reading pasted QIF…");
     try {
-      finishImport(parseQuickenFile("pasted.qif", paste));
+      const body = new FormData(form);
+      const file = body.get("quicken");
+      const paste = String(body.get("paste") ?? "").trim();
+      if (!(file instanceof File && file.size > 0) && !paste) {
+        const message =
+          "The form did not receive a file. Choose 2025data again, then click Read file.";
+        note(message);
+        setPayload({ ok: false, error: message });
+        return;
+      }
+      if (file instanceof File && file.size > 0) {
+        note(`Uploading ${file.name} (${Math.max(1, Math.round(file.size / 1024))} KB)…`);
+      }
+      const response = await fetch("/api/quicken", { method: "POST", body });
+      const data = (await response.json()) as ImportResponse;
+      setPayload(data);
+      if (data.ok) {
+        note(
+          `Read ${data.fileName}: ${data.transactionCount} transactions. Totals are below. Click Apply to the ledger.`
+        );
+      } else {
+        note(data.error ?? "The file could not be parsed.");
+      }
     } catch (cause) {
-      setBundle(null);
-      setStatus("");
-      setError(
-        cause instanceof Error ? cause.message : "The pasted text could not be parsed."
-      );
+      const message =
+        cause instanceof Error ? cause.message : "The upload failed.";
+      note(message);
+      setPayload({ ok: false, error: message });
     } finally {
-      setBusy(false);
+      setPending(false);
     }
   }
 
   function cycleKind(name: string, kind: LedgerKind) {
-    const next = nextKind(kind);
     setState((previous) => ({
       ...previous,
       categoryOverrides: {
         ...previous.categoryOverrides,
-        [name]: next,
+        [name]: nextKind(kind),
       },
     }));
     setApplied(false);
@@ -158,7 +129,7 @@ export function QuickenImport({
       },
     }));
     setApplied(true);
-    setStatus("Applied to the ledger. The 6–12 month sprint above now uses these numbers.");
+    note("Applied to the ledger. The 6–12 month sprint now uses these numbers.");
   }
 
   const visibleCategories = summary
@@ -166,9 +137,6 @@ export function QuickenImport({
         .filter((item) => item.kind !== "transfer")
         .slice(0, showAll ? undefined : 12)
     : [];
-
-  const showPreview =
-    Boolean(summary && bundle && (bundle.transactions.length > 0 || bundle.accounts.length > 0));
 
   return (
     <Card className="bg-card/80">
@@ -180,141 +148,71 @@ export function QuickenImport({
       </CardHeader>
       <CardContent className="flex flex-col gap-5 pt-5">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Export from Quicken, choose the file, then click <span className="font-medium text-foreground">Read file</span>.
-          Totals for that file appear in this card. Then apply them to the ledger.
+          Choose your .qif, then press <span className="font-medium text-foreground">Read file</span>.
+          A status line will appear directly under that button even if parsing fails.
         </p>
 
-        <details className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3 text-sm">
-          <summary className="cursor-pointer font-medium">
-            How to export from Quicken
-          </summary>
-          <ol className="mt-3 flex list-decimal flex-col gap-2 pl-5 text-muted-foreground">
-            <li>
-              File → File Export → QIF file. Include Transactions, Account
-              List, and Category List.
-            </li>
-            <li>
-              Optional for balances: Reports → Net Worth → Export to Excel →
-              save as CSV, and choose that file too.
-            </li>
-          </ol>
-        </details>
-
-        <div
-          className={cn(
-            "flex flex-col items-stretch gap-4 rounded-2xl border border-dashed px-4 py-6 transition-colors",
-            dragging ? "border-steward bg-steward/5" : "border-border bg-muted/30"
-          )}
-          onDragOver={(event) => {
+        <form
+          className="flex flex-col gap-4 rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-6"
+          action="/api/quicken"
+          method="post"
+          encType="multipart/form-data"
+          onSubmit={(event) => {
             event.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragging(false);
-            void ingestFiles([...event.dataTransfer.files]);
+            void submitForm(event.currentTarget);
           }}
         >
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Upload className="size-4 text-steward" />
-            Choose a .qif or .csv file
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".qif,.csv,.txt,.tsv,.QIF,.CSV,text/plain"
-            multiple
-            disabled={busy}
-            className="block w-full max-w-lg cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
-            onChange={() => {
-              const files = [...(inputRef.current?.files ?? [])];
-              setSelectedNames(files.map((file) => file.name).join(", "));
-              void ingestFiles(files);
-            }}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              disabled={busy}
-              onClick={() => {
-                const files = [...(inputRef.current?.files ?? [])];
-                if (files.length === 0) {
-                  setError("Choose a .qif file first, then click Read file.");
-                  return;
-                }
-                void ingestFiles(files);
-              }}
-            >
-              Read file
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                void loadSample(ingestFiles).catch(() => {
-                  setError("The sample files could not be loaded.");
-                });
-              }}
-            >
-              <FileSpreadsheet className="size-4" />
-              Load sample
-            </Button>
-            {selectedNames ? (
-              <p className="text-sm text-muted-foreground">{selectedNames}</p>
-            ) : null}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            You can also drop files onto this box, or paste QIF text below. After
-            the file name appears next to Choose Files, click Read file.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium">Or paste QIF text</p>
-          <Textarea
-            value={paste}
-            onChange={(event) => setPaste(event.target.value)}
-            placeholder={"!Type:Bank\nD3/15'26\nT-52.10\nPStore\nLGroceries\n^"}
-            className="min-h-28 font-mono text-xs"
-          />
-          <Button variant="outline" disabled={busy} onClick={parsePasted} className="self-start">
-            Parse pasted QIF
-          </Button>
-        </div>
-
-        {busy ? (
-          <p className="rounded-xl border border-steward/30 bg-steward/5 px-4 py-3 text-sm">
-            {status || "Reading…"}
-          </p>
-        ) : null}
-
-        {status && !busy ? (
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            File
+            <input
+              type="file"
+              name="quicken"
+              accept=".qif,.csv,.txt,.tsv,.QIF,.CSV,text/plain"
+              className="block w-full cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
+            />
+          </label>
+          <button
+            type="submit"
+            className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+          >
+            {pending ? "Reading…" : "Read file"}
+          </button>
           <p
-            className="rounded-xl border border-steward/30 bg-steward/5 px-4 py-3 text-sm"
+            ref={noteRef}
+            className="min-h-6 text-sm text-foreground"
             role="status"
           >
-            {status}
+            Waiting for a file.
+          </p>
+          <label className="flex flex-col gap-2 text-sm font-medium">
+            Or paste QIF text
+            <textarea
+              name="paste"
+              rows={6}
+              className="w-full rounded-lg border border-input bg-background px-2.5 py-2 font-mono text-xs"
+              placeholder={"!Type:Bank\nD3/15'26\nT-52.10\nPStore\nLGroceries\n^"}
+            />
+          </label>
+        </form>
+
+        {payload?.ok === false ? (
+          <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {payload.error}
           </p>
         ) : null}
 
-        {error ? (
-          <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        {hydrated && state.lastQuicken && !bundle ? (
+        {hydrated && state.lastQuicken && !payload?.ok ? (
           <p className="text-sm text-muted-foreground">
             Last applied: {state.lastQuicken.fileName} ·{" "}
             {state.lastQuicken.transactionCount} transactions.
           </p>
         ) : null}
 
-        {showPreview && summary && bundle ? (
+        {summary ? (
           <div className="flex flex-col gap-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-muted-foreground">
-                {summary.transactionCount} transactions
+                {summary.fileName} · {summary.transactionCount} transactions
                 {summary.startDate && summary.endDate
                   ? ` · ${summary.startDate} to ${summary.endDate}`
                   : ""}
@@ -418,21 +316,4 @@ function Metric({ label, value }: { label: string; value: string }) {
       <dd className="font-heading text-xl">{value}</dd>
     </div>
   );
-}
-
-async function loadSample(ingest: (files: File[]) => Promise<void>) {
-  const [transactions, netWorth] = await Promise.all([
-    fetch("/samples/quicken-transactions.csv").then((response) => {
-      if (!response.ok) throw new Error("Sample transaction file missing");
-      return response.blob();
-    }),
-    fetch("/samples/quicken-net-worth.csv").then((response) => {
-      if (!response.ok) throw new Error("Sample net worth file missing");
-      return response.blob();
-    }),
-  ]);
-  await ingest([
-    new File([transactions], "quicken-transactions.csv", { type: "text/csv" }),
-    new File([netWorth], "quicken-net-worth.csv", { type: "text/csv" }),
-  ]);
 }

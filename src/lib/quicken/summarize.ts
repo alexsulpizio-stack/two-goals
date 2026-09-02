@@ -151,3 +151,28 @@ export function summarizeQuicken(
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
+
+export function retotalSummary(
+  summary: QuickenSummary,
+  overrides: Record<string, LedgerKind>
+): QuickenSummary {
+  const categories = summary.categories.map((item) => ({
+    ...item,
+    kind:
+      overrides[item.name] ??
+      overrides[item.name.split(":")[0] ?? ""] ??
+      item.kind,
+  }));
+  const sumAbs = (kind: LedgerKind) =>
+    categories
+      .filter((item) => item.kind === kind)
+      .reduce((sum, item) => sum + Math.abs(item.total), 0);
+  const divisor = Math.max(1, summary.monthsCovered);
+  return {
+    ...summary,
+    categories,
+    monthlyIncome: roundMoney(sumAbs("income") / divisor),
+    monthlyExpenses: roundMoney(sumAbs("expense") / divisor),
+    monthlyGiving: roundMoney(sumAbs("giving") / divisor),
+  };
+}
