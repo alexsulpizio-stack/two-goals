@@ -15,7 +15,6 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useAppState } from "@/hooks/use-app-state";
 import { formatShortDate, todayKey } from "@/lib/dates";
-import { QuickenImport } from "@/components/quicken-import";
 import { SprintBoard } from "@/components/sprint-plan";
 import {
   formatDuration,
@@ -67,6 +66,10 @@ export function StewardView() {
   );
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [justRecorded, setJustRecorded] = useState<{
+    date: string;
+    netWorth: number;
+  } | null>(null);
 
   function financeValue(key: keyof FinanceInputs): string {
     if (draft && key in draft) return draft[key] ?? "";
@@ -74,28 +77,50 @@ export function StewardView() {
     return value === 0 ? "" : String(value);
   }
 
+  function parseMoney(raw: string | undefined, fallback: number): number {
+    if (raw === undefined) return fallback;
+    const trimmed = raw.trim();
+    if (trimmed === "") return 0;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
   function commitNumber(key: keyof FinanceInputs, raw: string) {
-    const parsed = raw.trim() === "" ? 0 : Number(raw);
-    const next = Number.isFinite(parsed) ? parsed : 0;
+    const next = parseMoney(raw, 0);
     setState((previous) => ({
       ...previous,
       finance: { ...previous.finance, [key]: next },
     }));
-    setDraft(null);
+    setDraft((previous) => {
+      if (!previous || !(key in previous)) return previous;
+      const copy = { ...previous };
+      delete copy[key];
+      return Object.keys(copy).length ? copy : null;
+    });
   }
 
   function recordSnapshot() {
     const date = todayKey();
+    const netWorth = parseMoney(draft?.netWorth, state.finance.netWorth);
     setState((previous) => ({
       ...previous,
+      finance: { ...previous.finance, netWorth },
       snapshots: [
-        { date, netWorth: previous.finance.netWorth },
+        { date, netWorth },
         ...previous.snapshots.filter((item) => item.date !== date),
       ],
     }));
+    setDraft((previous) => {
+      if (!previous || !("netWorth" in previous)) return previous;
+      const copy = { ...previous };
+      delete copy.netWorth;
+      return Object.keys(copy).length ? copy : null;
+    });
+    setJustRecorded({ date, netWorth });
   }
 
   const insight = stewardshipInsight(plan, sprint, hydrated);
+  const snapshots = hydrated ? state.snapshots : [];
 
   return (
     <div className="flex flex-col gap-10">
@@ -106,14 +131,11 @@ export function StewardView() {
         </h1>
         <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
           The point is not a yacht. The point is freedom to follow — to give,
-          to rest, to change work without fear. This window is a sprint. The
-          ledger below tells you the surplus, the lump sum, or the smaller life
-          that would actually arrive on time. If the books already live in
-          Quicken, import them first and the sprint will use those numbers.
+          to rest, to change work without fear. This window is a sprint. Enter
+          the ledger by hand. It tells you the surplus, the lump sum, or the
+          smaller life that would actually arrive on time.
         </p>
       </section>
-
-      <QuickenImport hydrated={hydrated} state={state} setState={setState} />
 
       <SprintBoard
         plan={plan}
@@ -173,9 +195,48 @@ export function StewardView() {
                 </p>
               </div>
             ))}
-            <Button onClick={recordSnapshot} variant="outline" className="self-start">
-              Record today’s net worth
-            </Button>
+
+            <div className="flex flex-col gap-3 border-t pt-5">
+              <Button
+                type="button"
+                variant="outline"
+                className="self-start"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  recordSnapshot();
+                }}
+              >
+                Record today’s net worth
+              </Button>
+              {justRecorded ? (
+                <p className="text-sm text-steward">
+                  Recorded {formatMoney(justRecorded.netWorth)} for{" "}
+                  {formatShortDate(justRecorded.date)}.
+                </p>
+              ) : null}
+              {snapshots.length > 0 ? (
+                <ul className="flex flex-col gap-2">
+                  {snapshots.slice(0, 8).map((item) => (
+                    <li
+                      key={item.date}
+                      className="flex items-baseline justify-between text-sm"
+                    >
+                      <span className="text-muted-foreground">
+                        {formatShortDate(item.date)}
+                      </span>
+                      <span className="tabular-nums">
+                        {formatMoney(item.netWorth)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Type invested net worth above, then record it. Today’s
+                  snapshot appears here so you can watch the climb.
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -262,32 +323,6 @@ export function StewardView() {
                 </p>
               )}
             </div>
-
-            {hydrated && state.snapshots.length > 0 ? (
-              <div className="flex flex-col gap-3">
-                <p className="text-sm font-medium">Net worth snapshots</p>
-                <ul className="flex flex-col gap-2">
-                  {state.snapshots.slice(0, 8).map((item) => (
-                    <li
-                      key={item.date}
-                      className="flex items-baseline justify-between text-sm"
-                    >
-                      <span className="text-muted-foreground">
-                        {formatShortDate(item.date)}
-                      </span>
-                      <span className="tabular-nums">
-                        {formatMoney(item.netWorth)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No snapshots yet. Record a net worth when you update the ledger
-                so you can watch the climb.
-              </p>
-            )}
           </CardContent>
         </Card>
       </section>
@@ -302,6 +337,7 @@ export function StewardView() {
               onClick={() => {
                 reset();
                 setConfirmReset(false);
+                setJustRecorded(null);
               }}
             >
               Clear everything

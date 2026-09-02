@@ -1,7 +1,3 @@
-import type { LedgerKind, WindowMonths } from "./quicken/types";
-
-export type { LedgerKind, WindowMonths };
-
 export type PracticeKind = "word" | "prayer" | "gathered" | "neighbor";
 
 export type PracticeDay = Record<PracticeKind, boolean>;
@@ -31,20 +27,11 @@ export type NetWorthSnapshot = {
   netWorth: number;
 };
 
-export type QuickenApply = {
-  fileName: string;
-  appliedAt: string;
-  windowMonths: WindowMonths;
-  transactionCount: number;
-};
-
 export type AppState = {
   practices: Record<string, PracticeDay>;
   prayers: PrayerEntry[];
   finance: FinanceInputs;
   snapshots: NetWorthSnapshot[];
-  categoryOverrides: Record<string, LedgerKind>;
-  lastQuicken: QuickenApply | null;
 };
 
 export const emptyPractice = (): PracticeDay => ({
@@ -69,6 +56,4 @@ export const defaultState: AppState = {
   prayers: [],
   finance: defaultFinance,
   snapshots: [],
-  categoryOverrides: {},
-  lastQuicken: null,
 };

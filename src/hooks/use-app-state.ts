@@ -30,8 +30,6 @@ function mergeState(parsed: Partial<AppState>): AppState {
       targetMonths: asSprintMonths(parsed.finance?.targetMonths),
     },
     snapshots: parsed.snapshots ?? defaultState.snapshots,
-    categoryOverrides: parsed.categoryOverrides ?? defaultState.categoryOverrides,
-    lastQuicken: parsed.lastQuicken ?? defaultState.lastQuicken,
   };
 }
 
