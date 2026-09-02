@@ -54,6 +54,23 @@ export function monthlySurplus(ledger: Pick<
   return ledger.monthlyIncome - ledger.monthlyExpenses - ledger.monthlyGiving;
 }
 
+export function isEmptyLedger(
+  ledger: Pick<
+    LedgerSnapshot,
+    "netWorth" | "monthlyIncome" | "monthlyExpenses" | "monthlyGiving"
+  >
+) {
+  return LEDGER_FIELDS.every((key) => ledger[key] === 0);
+}
+
+export function upsertTodaySnapshot(
+  snapshots: LedgerSnapshot[],
+  snapshot: LedgerSnapshot
+) {
+  if (isEmptyLedger(snapshot)) return snapshots;
+  return [snapshot, ...snapshots.filter((item) => item.date !== snapshot.date)];
+}
+
 export function snapshotTarget(
   snapshot: LedgerSnapshot,
   swrPercent: number

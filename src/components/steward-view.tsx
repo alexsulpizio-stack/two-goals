@@ -17,7 +17,9 @@ import { useAppState } from "@/hooks/use-app-state";
 import { formatShortDate, todayKey } from "@/lib/dates";
 import {
   LEDGER_FIELDS,
+  ledgerFromFinance,
   monthlySurplus,
+  upsertTodaySnapshot,
   type LedgerSnapshot,
 } from "@/lib/ledger";
 import { LedgerWhy } from "@/components/ledger-why";
@@ -115,10 +117,17 @@ export function StewardView() {
 
   function commitNumber(key: keyof FinanceInputs, raw: string) {
     const next = parseMoney(raw, 0);
-    setState((previous) => ({
-      ...previous,
-      finance: { ...previous.finance, [key]: next },
-    }));
+    setState((previous) => {
+      const finance = { ...previous.finance, [key]: next };
+      return {
+        ...previous,
+        finance,
+        snapshots: upsertTodaySnapshot(
+          previous.snapshots,
+          ledgerFromFinance(finance, todayKey())
+        ),
+      };
+    });
     setDraft((previous) => {
       if (!previous || !(key in previous)) return previous;
       const copy = { ...previous };
@@ -131,12 +140,12 @@ export function StewardView() {
     const now = Date.now();
     if (now - lastRecordAt.current < 400) return;
     lastRecordAt.current = now;
-    const empty =
+    if (
       snapshot.netWorth === 0 &&
       snapshot.monthlyIncome === 0 &&
       snapshot.monthlyExpenses === 0 &&
-      snapshot.monthlyGiving === 0;
-    if (empty) {
+      snapshot.monthlyGiving === 0
+    ) {
       setRecordNote({ kind: "empty" });
       return;
     }
@@ -151,10 +160,7 @@ export function StewardView() {
         monthlyExpenses: snapshot.monthlyExpenses,
         monthlyGiving: snapshot.monthlyGiving,
       },
-      snapshots: [
-        snapshot,
-        ...previous.snapshots.filter((item) => item.date !== snapshot.date),
-      ],
+      snapshots: upsertTodaySnapshot(previous.snapshots, snapshot),
     }));
   }
 
@@ -262,7 +268,7 @@ export function StewardView() {
                 onPointerDown={() => recordSnapshot()}
                 onClick={() => recordSnapshot()}
               >
-                Record today
+                Save today’s row
               </button>
               <p
                 id="ledger-status"
@@ -271,37 +277,11 @@ export function StewardView() {
                 hidden={recordNote == null && snapshots.length === 0}
               >
                 {recordNote?.kind === "empty"
-                  ? "Type net worth, income, living, or giving first, then record today."
+                  ? "Type net worth, income, living, or giving first. Leaving a field also writes today’s history row."
                   : latest
-                    ? `Recorded ${formatShortDate(latest.date)}: ${formatMoney(latest.netWorth)} net, ${formatMoney(latest.monthlyIncome)} income, ${formatMoney(latest.monthlyExpenses)} living, ${formatMoney(latest.monthlyGiving)} giving.`
+                    ? `Saved ${formatShortDate(latest.date)}: ${formatMoney(latest.netWorth)} net, ${formatMoney(latest.monthlyIncome)} income, ${formatMoney(latest.monthlyExpenses)} living, ${formatMoney(latest.monthlyGiving)} giving.`
                     : null}
               </p>
-              <ul id="ledger-snapshots" className="flex flex-col">
-                {snapshots.slice(0, 8).map((item) => (
-                  <li
-                    key={item.date}
-                    className="flex flex-col gap-1 border-b border-border/60 py-2 last:border-0"
-                  >
-                    <span className="text-muted-foreground">
-                      {formatShortDate(item.date)}
-                    </span>
-                    <span className="tabular-nums">
-                      {formatMoney(item.netWorth)} net
-                    </span>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {formatMoney(item.monthlyIncome)} in ·{" "}
-                      {formatMoney(item.monthlyExpenses)} living ·{" "}
-                      {formatMoney(item.monthlyGiving)} giving
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {snapshots.length === 0 && recordNote?.kind !== "saved" ? (
-                <p className="text-sm text-muted-foreground">
-                  Record today. That is how you know whether the gap shrank,
-                  not only whether you typed.
-                </p>
-              ) : null}
             </div>
           </CardContent>
         </Card>
@@ -392,6 +372,67 @@ export function StewardView() {
           </CardContent>
         </Card>
       </section>
+
+      <Card className="bg-card/80">
+        <CardHeader className="border-b">
+          <CardDescription>History</CardDescription>
+          <CardTitle className="font-heading text-2xl">
+            Saved on this device
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 pt-5">
+          <p id="ledger-save-note" className="text-sm leading-relaxed text-muted-foreground">
+            Saved in this browser on this device. Nothing is uploaded. Leaving a
+            field writes today’s row. Use Save today’s row to stamp it now.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-record-ledger=""
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-steward px-4 text-sm font-medium text-white hover:bg-steward/90"
+              onPointerDown={() => recordSnapshot()}
+              onClick={() => recordSnapshot()}
+            >
+              Save today’s row
+            </button>
+            <button
+              type="button"
+              data-download-ledger=""
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium hover:bg-muted"
+            >
+              Download a copy
+            </button>
+          </div>
+          <ul id="ledger-snapshots" className="flex flex-col">
+            {snapshots.slice(0, 12).map((item) => (
+              <li
+                key={item.date}
+                className="flex flex-col gap-1 border-b border-border/60 py-2 last:border-0"
+              >
+                <span className="text-muted-foreground">
+                  {formatShortDate(item.date)}
+                </span>
+                <span className="tabular-nums">
+                  {formatMoney(item.netWorth)} net
+                </span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {formatMoney(item.monthlyIncome)} in ·{" "}
+                  {formatMoney(item.monthlyExpenses)} living ·{" "}
+                  {formatMoney(item.monthlyGiving)} giving
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p
+            id="ledger-history-empty"
+            className="text-sm text-muted-foreground"
+            hidden={snapshots.length > 0}
+          >
+            No history yet. Enter the ledger and leave a field, or press Save
+            today’s row. Then this list is the trail.
+          </p>
+        </CardContent>
+      </Card>
 
       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
         {confirmReset ? (

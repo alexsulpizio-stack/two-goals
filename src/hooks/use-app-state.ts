@@ -34,17 +34,45 @@ function mergeState(parsed: Partial<AppState>): AppState {
   };
 }
 
+function readStored(): string | null {
+  try {
+    const local = window.localStorage.getItem(STORAGE_KEY);
+    if (local) return local;
+  } catch {
+    /* blocked */
+  }
+  try {
+    return window.sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 function reload() {
   if (typeof window === "undefined") return;
   loaded = true;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = readStored();
     current = raw
       ? mergeState(JSON.parse(raw) as Partial<AppState>)
       : defaultState;
   } catch {
-    window.localStorage.removeItem(STORAGE_KEY);
     current = defaultState;
+  }
+}
+
+function persist(next: AppState) {
+  const encoded = JSON.stringify(next);
+  try {
+    window.localStorage.setItem(STORAGE_KEY, encoded);
+    return;
+  } catch {
+    /* try session */
+  }
+  try {
+    window.sessionStorage.setItem(STORAGE_KEY, encoded);
+  } catch {
+    // Private mode or a sandboxed preview can block storage. Keep working in memory.
   }
 }
 
@@ -74,14 +102,6 @@ function getSnapshot() {
 
 function getServerSnapshot() {
   return defaultState;
-}
-
-function persist(next: AppState) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // Private mode or a sandboxed preview can block storage. Keep working in memory.
-  }
 }
 
 function emit(next: AppState) {
@@ -120,7 +140,16 @@ export function useAppState() {
   }, [setState]);
 
   const reset = useCallback(() => {
-    window.localStorage.removeItem(STORAGE_KEY);
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    try {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
     emit(defaultState);
   }, []);
 

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 
-import { snapshotDelta, snapshotTarget } from "../src/lib/ledger";
+import {
+  snapshotDelta,
+  snapshotTarget,
+  upsertTodaySnapshot,
+} from "../src/lib/ledger";
 
 const mark = snapshotTarget(
   {
@@ -38,5 +42,26 @@ const later = snapshotDelta(
 assert.ok(later);
 assert.equal(later.netWorthChange, 10_000);
 assert.equal(later.gapChange, -10_000);
+
+const once = upsertTodaySnapshot(
+  [],
+  {
+    date: "2026-09-02",
+    netWorth: 1,
+    monthlyIncome: 0,
+    monthlyExpenses: 0,
+    monthlyGiving: 0,
+  }
+);
+assert.equal(once.length, 1);
+const again = upsertTodaySnapshot(once, {
+  date: "2026-09-02",
+  netWorth: 2,
+  monthlyIncome: 0,
+  monthlyExpenses: 0,
+  monthlyGiving: 0,
+});
+assert.equal(again.length, 1);
+assert.equal(again[0]?.netWorth, 2);
 
 console.log("ledger tests passed");

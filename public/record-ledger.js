@@ -54,9 +54,29 @@
     };
   }
 
-  function readState() {
+  function storage() {
     try {
-      const raw = window.localStorage.getItem(KEY);
+      window.localStorage.setItem("__two-goals-probe", "1");
+      window.localStorage.removeItem("__two-goals-probe");
+      return { kind: "local", store: window.localStorage };
+    } catch {
+      /* try session */
+    }
+    try {
+      window.sessionStorage.setItem("__two-goals-probe", "1");
+      window.sessionStorage.removeItem("__two-goals-probe");
+      return { kind: "session", store: window.sessionStorage };
+    } catch {
+      return { kind: "none", store: null };
+    }
+  }
+
+  const bucket = storage();
+
+  function readState() {
+    if (!bucket.store) return defaultState();
+    try {
+      const raw = bucket.store.getItem(KEY);
       if (raw) return { ...defaultState(), ...JSON.parse(raw) };
     } catch {
       /* keep working in memory */
@@ -65,10 +85,17 @@
   }
 
   function writeState(state) {
+    if (!bucket.store) {
+      paintSaveNote(false);
+      return false;
+    }
     try {
-      window.localStorage.setItem(KEY, JSON.stringify(state));
+      bucket.store.setItem(KEY, JSON.stringify(state));
+      paintSaveNote(true);
+      return true;
     } catch {
-      /* preview iframes can block storage */
+      paintSaveNote(false);
+      return false;
     }
   }
 
@@ -94,6 +121,28 @@
     </li>`;
   }
 
+  function paintSaveNote(ok) {
+    const note = document.getElementById("ledger-save-note");
+    if (!note) return;
+    if (!ok || bucket.kind === "none") {
+      note.textContent =
+        "This browser blocked saving. Numbers will vanish when you leave. Download a copy below if you can.";
+      return;
+    }
+    note.textContent =
+      bucket.kind === "session"
+        ? "Saved in this browser tab only. They disappear when the tab closes. Download a copy if you want a file."
+        : "Saved in this browser on this device. Nothing is uploaded. History is below.";
+  }
+
+  function paintHistory(snapshots) {
+    const list = document.getElementById("ledger-snapshots");
+    const empty = document.getElementById("ledger-history-empty");
+    const rows = Array.isArray(snapshots) ? snapshots : [];
+    if (list) list.innerHTML = rows.slice(0, 12).map(snapshotRow).join("");
+    if (empty) empty.hidden = rows.length > 0;
+  }
+
   function updateSurplus(ledger) {
     const surplus = document.getElementById("ledger-surplus");
     if (!surplus) return;
@@ -105,50 +154,86 @@
         : `This month the barn is emptying by ${formatMoney(Math.abs(amount))}.`;
   }
 
-  function saveFinance() {
+  function emptyLedger(ledger) {
+    return FIELD_IDS.every((id) => ledger[id] === 0);
+  }
+
+  function saveLedger(makeSnapshot) {
     const ledger = readLedger();
     const state = readState();
     state.finance = { ...defaultState().finance, ...state.finance, ...ledger };
+    if (makeSnapshot && !emptyLedger(ledger)) {
+      const date = todayKey();
+      const snapshot = { date, ...ledger };
+      state.snapshots = [
+        snapshot,
+        ...(Array.isArray(state.snapshots) ? state.snapshots : []).filter(
+          (item) => item && item.date !== date
+        ),
+      ];
+    }
     writeState(state);
     updateSurplus(ledger);
+    paintHistory(state.snapshots);
     window.dispatchEvent(new Event("two-goals-external"));
+    return { ledger, state };
   }
 
   function record() {
-    const ledger = readLedger();
     const status = document.getElementById("ledger-status");
-    const list = document.getElementById("ledger-snapshots");
-    const empty = FIELD_IDS.every((id) => ledger[id] === 0);
-    if (empty) {
+    const { ledger, state } = saveLedger(true);
+    if (emptyLedger(ledger)) {
       if (status) {
         status.hidden = false;
         status.textContent =
-          "Type net worth, income, living, or giving first, then record today.";
+          "Type net worth, income, living, or giving first. Leaving a field also saves today’s row.";
       }
       return;
     }
-
-    const date = todayKey();
-    const snapshot = { date, ...ledger };
-    const state = readState();
-    state.finance = { ...defaultState().finance, ...state.finance, ...ledger };
-    state.snapshots = [
-      snapshot,
-      ...(Array.isArray(state.snapshots) ? state.snapshots : []).filter(
-        (item) => item && item.date !== date
-      ),
-    ];
-    writeState(state);
-    updateSurplus(ledger);
-    window.dispatchEvent(new Event("two-goals-external"));
-
     if (status) {
       status.hidden = false;
-      status.textContent = `Recorded ${formatShortDate(date)}: ${formatMoney(ledger.netWorth)} net, ${formatMoney(ledger.monthlyIncome)} income, ${formatMoney(ledger.monthlyExpenses)} living, ${formatMoney(ledger.monthlyGiving)} giving.`;
+      status.textContent = `Saved ${formatShortDate(todayKey())}: ${formatMoney(ledger.netWorth)} net, ${formatMoney(ledger.monthlyIncome)} income, ${formatMoney(ledger.monthlyExpenses)} living, ${formatMoney(ledger.monthlyGiving)} giving.`;
     }
-    if (list) {
-      list.innerHTML = state.snapshots.slice(0, 8).map(snapshotRow).join("");
+    paintHistory(state.snapshots);
+  }
+
+  function restore() {
+    const state = readState();
+    const finance = { ...defaultState().finance, ...state.finance };
+    for (const id of FIELD_IDS) {
+      const input = document.getElementById(id);
+      if (!(input instanceof HTMLInputElement)) continue;
+      if (document.activeElement === input) continue;
+      const value = finance[id];
+      input.value = value ? String(value) : "";
     }
+    updateSurplus(finance);
+    paintHistory(state.snapshots);
+    paintSaveNote(bucket.kind !== "none");
+    const status = document.getElementById("ledger-status");
+    if (status && state.snapshots?.[0]) {
+      const latest = state.snapshots[0];
+      status.hidden = false;
+      status.textContent = `Last saved ${formatShortDate(latest.date)}: ${formatMoney(latest.netWorth)} net, ${formatMoney(latest.monthlyIncome)} income, ${formatMoney(latest.monthlyExpenses)} living, ${formatMoney(latest.monthlyGiving)} giving.`;
+    }
+  }
+
+  let lastDownloadAt = 0;
+
+  function downloadHistory() {
+    const now = Date.now();
+    if (now - lastDownloadAt < 400) return;
+    lastDownloadAt = now;
+    const state = readState();
+    const blob = new Blob([JSON.stringify(state, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `two-goals-ledger-${todayKey()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   document.addEventListener(
@@ -157,6 +242,7 @@
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (target.closest("[data-record-ledger]")) record();
+      if (target.closest("[data-download-ledger]")) downloadHistory();
     },
     true
   );
@@ -166,7 +252,7 @@
     (event) => {
       if (!(event.target instanceof HTMLInputElement)) return;
       if (!FIELD_IDS.includes(event.target.id)) return;
-      saveFinance();
+      saveLedger(true);
     },
     true
   );
@@ -178,4 +264,11 @@
     event.preventDefault();
     record();
   });
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", restore);
+  } else {
+    restore();
+  }
+  window.addEventListener("pageshow", restore);
 })();
