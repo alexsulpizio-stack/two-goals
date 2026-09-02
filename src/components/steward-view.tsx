@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Textarea } from "@/components/ui/textarea";
 import { useAppState } from "@/hooks/use-app-state";
 import { formatShortDate, todayKey } from "@/lib/dates";
 import {
@@ -23,6 +24,11 @@ import {
   upsertTodaySnapshot,
   type LedgerSnapshot,
 } from "@/lib/ledger";
+import {
+  extraIncomeNeeded,
+  streamStatusCopy,
+  deriveStreamStatus,
+} from "@/lib/income-plays";
 import {
   incomeHint,
   namedIncomeSources,
@@ -37,7 +43,7 @@ import {
   independencePlan,
   sprintPlan,
 } from "@/lib/finance";
-import type { FinanceInputs, SprintMonths } from "@/lib/types";
+import type { FinanceInputs, NextStream, SprintMonths } from "@/lib/types";
 
 const moneyFields: {
   key: "netWorth" | "monthlyExpenses" | "monthlyGiving";
@@ -221,10 +227,9 @@ export function StewardView() {
           Independent in the next 6 to 12 months.
         </h1>
         <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
-          This page does not earn the money. Name every income stream, then it
-          names the only three sizes that hit the deadline: more invested each
-          month, a lump sum now, or a smaller living cost. Giving stays in the
-          target. Pick one and do it.
+          This page does not earn the money. It sizes the new take-home the
+          deadline requires, then you name the stream and make the ask. A
+          smaller life is not the plan. Giving stays.
         </p>
       </section>
 
@@ -240,6 +245,11 @@ export function StewardView() {
             finance: { ...previous.finance, targetMonths: months },
           }))
         }
+      />
+
+      <NextStreamCard
+        suggestedMonthly={extraIncomeNeeded(sprint)}
+        stream={state.finance.nextStream}
       />
 
       <section className="grid gap-4 lg:grid-cols-2">
@@ -506,6 +516,97 @@ export function StewardView() {
 function sliderNumber(value: number | readonly number[], fallback: number) {
   if (typeof value === "number") return value;
   return value[0] ?? fallback;
+}
+
+function NextStreamCard({
+  stream,
+  suggestedMonthly,
+}: {
+  stream: NextStream;
+  suggestedMonthly: number;
+}) {
+  const status = deriveStreamStatus(stream);
+  const monthlyDisplay =
+    stream.monthly > 0
+      ? String(stream.monthly)
+      : suggestedMonthly > 0
+        ? String(Math.round(suggestedMonthly))
+        : "";
+  return (
+    <Card className="bg-card/80">
+      <CardHeader className="border-b">
+        <CardDescription>This week’s stream</CardDescription>
+        <CardTitle className="font-heading text-2xl">
+          Name the income you will create
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5 pt-5">
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          The cards above size the gap. This box is the work: who you will
+          serve, what they will pay each month, and the one ask you will make
+          before the week ends.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-[1.2fr_0.8fr]">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="stream-name">The stream</Label>
+            <Input
+              id="stream-name"
+              name="stream-name"
+              placeholder="Saturday clients · a spare room · a course · overtime"
+              defaultValue={stream.name}
+              suppressHydrationWarning
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="stream-monthly">It must produce / month</Label>
+            <div className="relative">
+              <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">
+                $
+              </span>
+              <Input
+                id="stream-monthly"
+                name="stream-monthly"
+                inputMode="decimal"
+                className="pl-6"
+                placeholder={suggestedMonthly > 0 ? String(Math.round(suggestedMonthly)) : "0"}
+                defaultValue={monthlyDisplay}
+                suppressHydrationWarning
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="stream-ask">This week’s ask</Label>
+          <Textarea
+            id="stream-ask"
+            name="stream-ask"
+            placeholder="Who you will talk to, the price you will name, and the day you will do it."
+            defaultValue={stream.ask}
+            suppressHydrationWarning
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            data-save-stream=""
+            className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-steward px-4 text-sm font-medium text-white hover:bg-steward/90"
+          >
+            Save this stream
+          </button>
+          <button
+            type="button"
+            data-stream-earning=""
+            className="inline-flex h-10 w-fit items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium hover:bg-muted"
+          >
+            First dollar arrived
+          </button>
+        </div>
+        <p id="stream-status" className="text-sm leading-relaxed">
+          {streamStatusCopy(status)}
+        </p>
+      </CardContent>
+    </Card>
+  );
 }
 
 function MoneyField({

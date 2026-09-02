@@ -8,6 +8,7 @@ import {
   type SprintPlan,
   SPRINT_WINDOWS,
 } from "@/lib/finance";
+import { incomePlays, livingFootnote } from "@/lib/income-plays";
 import { nextMove } from "@/lib/next-move";
 import type { FinanceInputs, SprintMonths } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -31,13 +32,15 @@ export function SprintBoard({
   const sisterWindow: SprintMonths = targetMonths === 6 ? 12 : 6;
   const move = nextMove(plan, sprint, finance);
   const offTrack = hasInputs && plan.fiNumber > 0 && !sprint.reached && !sprint.onTrack;
+  const ready = hasInputs && plan.fiNumber > 0;
+  const plays = incomePlays({ plan, sprint, ready });
   const lines =
     move.lines.length >= 3
       ? move.lines.slice(0, 3)
       : [
-          move.lines[0] ?? "More invested each month: —",
-          move.lines[1] ?? "Or a lump sum now: —",
-          move.lines[2] ?? "Or a living ceiling: — (giving stays).",
+          move.lines[0] ?? "One new stream: — / month",
+          move.lines[1] ?? "Or two smaller streams: — each",
+          move.lines[2] ?? "Or raise what you already earn: — / month",
         ];
 
   return (
@@ -131,61 +134,34 @@ export function SprintBoard({
 
       <div id="sprint-levers" className="grid gap-4 lg:grid-cols-3">
         <Lever
+          kickerId="lever-surplus-kicker"
+          titleId="lever-surplus-title"
           figureId="lever-surplus-figure"
+          noteId="lever-surplus-note"
           bodyId="lever-surplus-body"
-          kicker="Or this"
-          title="Raise the surplus"
-          body={
-            !hasInputs || plan.fiNumber <= 0
-              ? "Type living, giving, income, and net worth. This becomes the extra you must invest each month."
-              : sprint.incomeLift > 0
-                ? `Save or earn ${formatMoney(sprint.extraMonthlySavings)} more each month.`
-                : `Put ${formatMoney(sprint.requiredMonthlySavings)} to investments each month.`
-          }
-          figure={
-            hasInputs && plan.fiNumber > 0
-              ? formatMoney(sprint.extraMonthlySavings)
-              : "—"
-          }
-          figureNote="more / month"
+          play={plays[0]}
         />
         <Lever
+          kickerId="lever-lump-kicker"
+          titleId="lever-lump-title"
           figureId="lever-lump-figure"
+          noteId="lever-lump-note"
           bodyId="lever-lump-body"
-          kicker="Or this"
-          title="Bring a lump sum"
-          body="A bonus, a sale, extra work cashed in once."
-          figure={
-            hasInputs && plan.fiNumber > 0
-              ? formatMoney(sprint.lumpSumNeeded)
-              : "—"
-          }
-          figureNote="once, now"
+          play={plays[1]}
         />
         <Lever
+          kickerId="lever-living-kicker"
+          titleId="lever-living-title"
           figureId="lever-living-figure"
+          noteId="lever-living-note"
           bodyId="lever-living-body"
-          kicker="Or this"
-          title="Shrink living"
-          body={
-            !hasInputs || plan.fiNumber <= 0
-              ? "Giving stays. This becomes the most you can spend on living and still hit the date."
-              : sprint.cutsAloneInsufficient
-                ? "Living cuts alone cannot get there."
-                : sprint.expenseCutNeeded > 0
-                  ? `Live on ${formatMoney(sprint.maxMonthlyExpenses ?? 0)}. Giving stays.`
-                  : "Living can stay. Surplus or a lump sum is the bottleneck."
-          }
-          figure={
-            !hasInputs || plan.fiNumber <= 0
-              ? "—"
-              : sprint.cutsAloneInsufficient
-                ? "Not enough"
-                : formatMoney(sprint.maxMonthlyExpenses ?? 0)
-          }
-          figureNote="max living / month"
+          play={plays[2]}
         />
       </div>
+
+      <p id="living-footnote" className="text-sm text-muted-foreground">
+        {livingFootnote(sprint, ready)}
+      </p>
 
       <p
         id="sprint-on-track-note"
@@ -220,36 +196,48 @@ function SprintStat({
 }
 
 function Lever({
+  kickerId,
+  titleId,
   figureId,
+  noteId,
   bodyId,
-  kicker,
-  title,
-  body,
-  figure,
-  figureNote,
+  play,
 }: {
+  kickerId: string;
+  titleId: string;
   figureId: string;
+  noteId: string;
   bodyId: string;
-  kicker: string;
-  title: string;
-  body: string;
-  figure: string;
-  figureNote: string;
+  play: {
+    kicker: string;
+    title: string;
+    figure: string;
+    figureNote: string;
+    body: string;
+  };
 }) {
   return (
     <article className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5">
-      <p className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
-        {kicker}
+      <p
+        id={kickerId}
+        className="text-xs tracking-[0.18em] text-muted-foreground uppercase"
+      >
+        {play.kicker}
       </p>
-      <p className="font-heading text-2xl leading-tight">{title}</p>
+      <p id={titleId} className="font-heading text-2xl leading-tight">
+        {play.title}
+      </p>
       <p id={figureId} className="font-heading text-3xl text-steward">
-        {figure}
+        {play.figure}
       </p>
-      <p className="text-xs tracking-wide text-muted-foreground uppercase">
-        {figureNote}
+      <p
+        id={noteId}
+        className="text-xs tracking-wide text-muted-foreground uppercase"
+      >
+        {play.figureNote}
       </p>
       <p id={bodyId} className="text-sm leading-relaxed text-muted-foreground">
-        {body}
+        {play.body}
       </p>
     </article>
   );

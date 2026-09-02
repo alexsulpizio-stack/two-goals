@@ -14,12 +14,22 @@ export type PrayerEntry = {
 
 export type SprintMonths = 6 | 12;
 
+export type StreamStatus = "blank" | "named" | "asked" | "earning";
+
+export type NextStream = {
+  name: string;
+  monthly: number;
+  ask: string;
+  status: StreamStatus;
+};
+
 export type FinanceInputs = {
   netWorth: number;
   monthlyIncome: number;
   monthlyExpenses: number;
   monthlyGiving: number;
   incomeSources: IncomeSource[];
+  nextStream: NextStream;
   expectedReturn: number;
   swr: number;
   targetMonths: SprintMonths;
@@ -56,6 +66,7 @@ export const defaultFinance: FinanceInputs = {
   monthlyExpenses: 0,
   monthlyGiving: 0,
   incomeSources: [{ id: "income-1", name: "", monthly: 0 }],
+  nextStream: { name: "", monthly: 0, ask: "", status: "blank" },
   expectedReturn: 5,
   swr: 4,
   targetMonths: 12,

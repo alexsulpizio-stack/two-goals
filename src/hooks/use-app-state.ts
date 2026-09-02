@@ -7,6 +7,7 @@ import {
   normalizeIncomeSources,
   totalMonthlyIncome,
 } from "@/lib/income";
+import { asNextStream } from "@/lib/income-plays";
 import {
   defaultState,
   emptyPractice,
@@ -36,6 +37,7 @@ function mergeState(parsed: Partial<AppState>): AppState {
       targetMonths: asSprintMonths(parsed.finance?.targetMonths),
       incomeSources,
       monthlyIncome: totalMonthlyIncome(incomeSources),
+      nextStream: asNextStream(parsed.finance?.nextStream),
     },
     snapshots: asLedgerSnapshots(parsed.snapshots),
   };

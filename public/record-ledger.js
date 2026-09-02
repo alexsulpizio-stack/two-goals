@@ -86,6 +86,7 @@
         monthlyExpenses: 0,
         monthlyGiving: 0,
         incomeSources: [{ id: "income-1", name: "", monthly: 0 }],
+        nextStream: { name: "", monthly: 0, ask: "", status: "blank" },
         expectedReturn: 5,
         swr: 4,
         targetMonths: 12,
@@ -174,6 +175,10 @@
     return (sources || []).filter(
       (source) => (source.monthly || 0) > 0 || (source.name || "").length > 0
     );
+  }
+
+  function isStreamField(el) {
+    return el.id === "stream-name" || el.id === "stream-monthly" || el.id === "stream-ask";
   }
 
   function isIncomeInput(input) {
@@ -532,19 +537,277 @@
     };
   }
 
+  function extraIncomeNeeded(sprint) {
+    return Math.max(0, sprint.extraMonthlySavings);
+  }
+
+  function streamSplits(extra) {
+    const one = Math.max(0, extra);
+    return {
+      one,
+      two: one > 0 ? Math.round(one / 2) : 0,
+      three: one > 0 ? Math.round(one / 3) : 0,
+    };
+  }
+
+  function incomePlays(plan, sprint, ready) {
+    const extra = extraIncomeNeeded(sprint);
+    const splits = streamSplits(extra);
+    if (!ready || plan.fiNumber <= 0) {
+      return [
+        {
+          kicker: "Create this",
+          title: "One new stream",
+          figure: "—",
+          figureNote: "new / month",
+          body: "A client, a shift, a product, a room. Living plus giving set the size.",
+        },
+        {
+          kicker: "Or split it",
+          title: "Two smaller streams",
+          figure: "—",
+          figureNote: "each / month",
+          body: "If one offer cannot carry the whole gap, start two.",
+        },
+        {
+          kicker: "Or raise these",
+          title: "More from work you have",
+          figure: "—",
+          figureNote: "more / month",
+          body: "Raise a rate, add hours, or bill a project now. Do not start with a smaller life.",
+        },
+      ];
+    }
+    if (plan.reached || (sprint.onTrack && extra <= 0)) {
+      return [
+        {
+          kicker: "Protect this",
+          title: "Do not add lifestyle",
+          figure: formatMoney(0),
+          figureNote: "new / month required",
+          body: "The date is in reach. New income is optional. Inflating living is how the sprint dies.",
+        },
+        {
+          kicker: "Keep this",
+          title: "Existing streams",
+          figure: formatMoney(plan.monthlySavings),
+          figureNote: "invested / month",
+          body: "Keep giving. Keep the surplus working. Do not let a new want eat it.",
+        },
+        {
+          kicker: "Skip this",
+          title: "A smaller life",
+          figure: "Not the plan",
+          figureNote: "living cuts",
+          body: "You do not need to shrink living to hit the date. Do not treat cuts as the work.",
+        },
+      ];
+    }
+    return [
+      {
+        kicker: "Create this",
+        title: "One new stream",
+        figure: formatMoney(splits.one),
+        figureNote: "new / month",
+        body: `Name a client, a shift, a product, or a room that pays ${formatMoney(splits.one)} every month. First dollar this month. Giving stays.`,
+      },
+      {
+        kicker: "Or split it",
+        title: "Two smaller streams",
+        figure: formatMoney(splits.two),
+        figureNote: "each / month",
+        body:
+          splits.three > 0
+            ? `Two offers of ${formatMoney(splits.two)}, or three of ${formatMoney(splits.three)}. Same total. Easier to start.`
+            : "Two smaller offers that add up to the monthly gap.",
+      },
+      {
+        kicker: "Or raise these",
+        title: "More from work you have",
+        figure: formatMoney(splits.one),
+        figureNote: "more / month",
+        body:
+          sprint.lumpSumNeeded > 0
+            ? `Raise rates or hours on the streams already on the ledger. Or cash a project / sale once: ${formatMoney(sprint.lumpSumNeeded)}.`
+            : "Raise rates or hours on the streams already on the ledger until the monthly gap is gone.",
+      },
+    ];
+  }
+
+  function livingFootnote(sprint, ready) {
+    if (!ready) {
+      return "A smaller life is not the plan. Create income. Giving stays in the target.";
+    }
+    if (sprint.cutsAloneInsufficient) {
+      return "Living cuts alone cannot hit this deadline. The work is new income.";
+    }
+    if (sprint.expenseCutNeeded > 0) {
+      return `Living cuts are a last resort, not the move: a ceiling of ${formatMoney(sprint.maxMonthlyExpenses ?? 0)} would also mathematically work. Create the income instead.`;
+    }
+    return "Living can stay. The bottleneck is income you have not created yet.";
+  }
+
+  function streamStatusCopy(status) {
+    if (status === "earning") {
+      return "This stream is on the ledger. If the gap remains, name the next one.";
+    }
+    if (status === "asked") {
+      return "The ask is written. The next mark is the first dollar.";
+    }
+    if (status === "named") {
+      return "Named. Write this week’s ask — a person, a price, a date.";
+    }
+    return "Name the stream you will create. The size is the monthly gap above.";
+  }
+
+  function deriveStreamStatus(stream) {
+    if (stream.status === "earning") return "earning";
+    if (stream.name && stream.ask) return "asked";
+    if (stream.name) return "named";
+    return "blank";
+  }
+
+  function readNextStream(suggested) {
+    const nameInput = document.getElementById("stream-name");
+    const monthlyInput = document.getElementById("stream-monthly");
+    const askInput = document.getElementById("stream-ask");
+    const name = nameInput instanceof HTMLInputElement ? nameInput.value.trim().slice(0, 80) : "";
+    const monthly = parseMoney(monthlyInput instanceof HTMLInputElement ? monthlyInput.value : "");
+    const ask =
+      askInput instanceof HTMLTextAreaElement || askInput instanceof HTMLInputElement
+        ? askInput.value.trim().slice(0, 280)
+        : "";
+    const stream = {
+      name,
+      monthly: monthly > 0 ? monthly : Math.max(0, suggested || 0),
+      ask,
+      status: "blank",
+    };
+    stream.status = deriveStreamStatus(stream);
+    return stream;
+  }
+
+  function paintPlays(plan, sprint) {
+    const ready = plan.hasInputs && plan.fiNumber > 0;
+    const plays = incomePlays(plan, sprint, ready);
+    const keys = ["surplus", "lump", "living"];
+    plays.forEach((play, index) => {
+      const key = keys[index];
+      setText(`lever-${key}-kicker`, play.kicker);
+      setText(`lever-${key}-title`, play.title);
+      setText(`lever-${key}-figure`, play.figure);
+      setText(`lever-${key}-note`, play.figureNote);
+      setText(`lever-${key}-body`, play.body);
+    });
+    setText("living-footnote", livingFootnote(sprint, ready));
+  }
+
+  function paintStream(finance, sprint) {
+    const suggested = extraIncomeNeeded(sprint);
+    const stored = finance.nextStream || { name: "", monthly: 0, ask: "", status: "blank" };
+    const nameInput = document.getElementById("stream-name");
+    const monthlyInput = document.getElementById("stream-monthly");
+    const askInput = document.getElementById("stream-ask");
+    if (nameInput instanceof HTMLInputElement && document.activeElement !== nameInput) {
+      nameInput.value = stored.name || "";
+    }
+    if (monthlyInput instanceof HTMLInputElement && document.activeElement !== monthlyInput) {
+      const amount = stored.monthly > 0 ? stored.monthly : suggested;
+      monthlyInput.value = amount ? String(Math.round(amount)) : "";
+    }
+    if (
+      (askInput instanceof HTMLTextAreaElement || askInput instanceof HTMLInputElement) &&
+      document.activeElement !== askInput
+    ) {
+      askInput.value = stored.ask || "";
+    }
+    const preview = {
+      name:
+        nameInput instanceof HTMLInputElement && document.activeElement === nameInput
+          ? nameInput.value.trim()
+          : stored.name,
+      monthly: stored.monthly,
+      ask:
+        askInput && document.activeElement === askInput
+          ? String(askInput.value).trim()
+          : stored.ask,
+      status: stored.status,
+    };
+    setText("stream-status", streamStatusCopy(deriveStreamStatus(preview)));
+  }
+
+  function saveStream(statusOverride) {
+    const finance = financeFromPage();
+    const sprint = sprintPlan(finance);
+    const stream = readNextStream(extraIncomeNeeded(sprint));
+    if (statusOverride) stream.status = statusOverride;
+    const state = readState();
+    state.finance = {
+      ...defaultState().finance,
+      ...state.finance,
+      nextStream: stream,
+    };
+    writeState(state);
+    paintStream(state.finance, sprint);
+    window.dispatchEvent(new Event("two-goals-external"));
+    return stream;
+  }
+
+  function markStreamEarning() {
+    const finance = financeFromPage();
+    const sprint = sprintPlan(finance);
+    const stream = readNextStream(extraIncomeNeeded(sprint));
+    if (!stream.name || stream.monthly <= 0) {
+      setText(
+        "stream-status",
+        "Name the stream and the monthly dollars first. Then the first dollar can land on the ledger."
+      );
+      return;
+    }
+    stream.status = "earning";
+    const sources = readIncomeSources();
+    const existing = sources.findIndex(
+      (item) => item.name.toLowerCase() === stream.name.toLowerCase()
+    );
+    if (existing >= 0) {
+      sources[existing].monthly = stream.monthly;
+      sources[existing].name = stream.name;
+    } else if (sources.length === 1 && !sources[0].name && sources[0].monthly === 0) {
+      sources[0] = { id: sources[0].id || newIncomeId(), name: stream.name, monthly: stream.monthly };
+    } else {
+      sources.push({ id: newIncomeId(), name: stream.name, monthly: stream.monthly });
+    }
+    const state = readState();
+    state.finance = {
+      ...defaultState().finance,
+      ...state.finance,
+      incomeSources: sources,
+      monthlyIncome: totalIncome(sources),
+      nextStream: stream,
+    };
+    writeState(state);
+    paintIncomeRows(sources);
+    updateSurplus(readLedger());
+    paintMove();
+    setText("stream-status", streamStatusCopy("earning"));
+    window.dispatchEvent(new Event("two-goals-external"));
+  }
+
   function nextMove(plan, sprint, finance) {
     const deadline = formatMonthYear(addMonths(new Date(), finance.targetMonths));
+    const extra = extraIncomeNeeded(sprint);
+    const splits = streamSplits(extra);
     if (!plan.hasInputs || plan.fiNumber <= 0) {
       return {
-        kicker: "Your move",
-        headline: "Enter living costs and giving. The three sizes fill in as you type.",
+        kicker: "Create income",
+        headline: "Name the life to fund. Then this page sizes the income you still have to create.",
         lines: [
-          "More invested each month: —",
-          "Or a lump sum now: —",
-          "Or a living ceiling: — (giving stays).",
+          "One new stream: — / month",
+          "Or two smaller streams: — each",
+          "Or raise what you already earn: — / month",
         ],
         footer:
-          "Living plus giving set the nest egg. Income and net worth then name the only three sizes that hit the deadline. Pick one and do it.",
+          "Living plus giving set the nest egg. The gap is not a smaller life. It is work you have not named yet.",
       };
     }
     if (plan.reached) {
@@ -553,7 +816,7 @@
         headline: "The money goal is met. Do not let it become the master.",
         lines: [
           "Keep giving. Do not inflate living just because the nest egg is big enough.",
-          "Surplus this month is no longer the bottleneck.",
+          "You do not need another stream for the date. You may create one as overflow.",
           "Protect the life you already funded.",
         ],
         footer: "Seek first the kingdom. The ledger’s job here is to keep the barn from owning you.",
@@ -561,18 +824,16 @@
     }
     if (plan.monthlySavings < 0) {
       return {
-        kicker: "Your move this month",
-        headline: `Stop the bleed. This month the barn empties by ${formatMoney(Math.abs(plan.monthlySavings))}.`,
+        kicker: "Create income this month",
+        headline: `Create ${formatMoney(Math.max(extra, Math.abs(plan.monthlySavings)))} more take-home a month. Until it arrives the barn empties by ${formatMoney(Math.abs(plan.monthlySavings))}.`,
         lines: [
-          "Cut living until take-home covers living plus giving. The 6–12 month sprint cannot start while net worth is falling.",
-          sprint.lumpSumNeeded > 0
-            ? `A lump sum of ${formatMoney(sprint.lumpSumNeeded)} would still close the nest-egg gap.`
-            : "A lump sum cannot substitute for stopping the bleed.",
-          sprint.cutsAloneInsufficient
-            ? "Living cuts alone cannot hit this deadline. Stop the bleed first, then raise surplus."
-            : `Live on ${formatMoney(sprint.maxMonthlyExpenses ?? 0)} if you want the date to stay possible.`,
+          `One new stream of ${formatMoney(splits.one)} covers the hole and starts the sprint.`,
+          splits.two > 0
+            ? `Or two streams of ${formatMoney(splits.two)} each.`
+            : "Name the offer and make one ask this week.",
+          "A smaller life can stop the bleed. It is not the first move. Create the income.",
         ],
-        footer: "Giving can stay. The rest of the life has to fit.",
+        footer: "Giving can stay. Name the stream below and make the ask before you cut the life.",
       };
     }
     if (sprint.onTrack) {
@@ -581,28 +842,26 @@
         headline: `Keep investing ${formatMoney(plan.monthlySavings)} a month. Do not raise living costs.`,
         lines: [
           `That pace reaches the nest egg of ${formatMoney(plan.fiNumber)} in ${formatDuration(plan.monthsRemaining)} — inside the ${deadline} window.`,
-          "Extra surplus needed this month: $0.",
-          "Living can stay. Do not inflate it.",
+          "No new stream is required for this date.",
+          "Creating extra income is overflow, not rescue. Do not spend it on a bigger life.",
         ],
         footer: "The help is protection: a bigger lifestyle is how this sprint dies.",
       };
     }
     return {
-      kicker: "Your move this month — pick one",
-      headline: `Current path misses ${deadline}. It takes ${formatDuration(plan.monthsRemaining)}.`,
+      kicker: "Create income this month",
+      headline: `Current path misses ${deadline}. Create ${formatMoney(splits.one)} a month in new take-home.`,
       lines: [
-        `Put ${formatMoney(sprint.extraMonthlySavings)} more into investments each month (take-home ${formatMoney(sprint.requiredMonthlyIncome)} if living and giving stay the same).`,
+        `One new stream of ${formatMoney(splits.one)} — a client, a shift, a product, a room.`,
+        splits.two > 0
+          ? `Or two streams of ${formatMoney(splits.two)} each (or three of ${formatMoney(splits.three)}).`
+          : "Name the offer. Make one ask this week.",
         sprint.lumpSumNeeded > 0
-          ? `Or add ${formatMoney(sprint.lumpSumNeeded)} in cash once, now.`
-          : "Or a lump sum is not required if surplus rises enough.",
-        sprint.cutsAloneInsufficient
-          ? "Cutting living costs alone cannot hit this deadline. It has to be more surplus or a lump sum."
-          : sprint.expenseCutNeeded > 0
-            ? `Or live on ${formatMoney(sprint.maxMonthlyExpenses ?? 0)} a month — cut ${formatMoney(sprint.expenseCutNeeded)} of living. Giving stays.`
-            : "Living costs can stay. The bottleneck is surplus or a lump sum.",
+          ? `Or raise the streams you already run by ${formatMoney(splits.one)} a month — or cash a project once: ${formatMoney(sprint.lumpSumNeeded)}.`
+          : `Or raise the streams you already run by ${formatMoney(splits.one)} a month.`,
       ],
       footer:
-        "This page does not close the gap. Those three numbers are the only sizes that do. Pick one this week and run it.",
+        "Do not start with a smaller life. Name the stream, make one ask this week, and put the first dollar on the ledger.",
     };
   }
 
@@ -637,38 +896,8 @@
       );
     }
 
-    const ready = plan.hasInputs && plan.fiNumber > 0;
-    setText(
-      "lever-surplus-figure",
-      ready ? formatMoney(sprint.extraMonthlySavings) : "—"
-    );
-    setText(
-      "lever-surplus-body",
-      !ready
-        ? "Type living, giving, income, and net worth. This becomes the extra you must invest each month."
-        : sprint.incomeLift > 0
-          ? `Save or earn ${formatMoney(sprint.extraMonthlySavings)} more each month.`
-          : `Put ${formatMoney(sprint.requiredMonthlySavings)} to investments each month.`
-    );
-    setText("lever-lump-figure", ready ? formatMoney(sprint.lumpSumNeeded) : "—");
-    setText(
-      "lever-living-figure",
-      !ready
-        ? "—"
-        : sprint.cutsAloneInsufficient
-          ? "Not enough"
-          : formatMoney(sprint.maxMonthlyExpenses ?? 0)
-    );
-    setText(
-      "lever-living-body",
-      !ready
-        ? "Giving stays. This becomes the most you can spend on living and still hit the date."
-        : sprint.cutsAloneInsufficient
-          ? "Living cuts alone cannot get there."
-          : sprint.expenseCutNeeded > 0
-            ? `Live on ${formatMoney(sprint.maxMonthlyExpenses ?? 0)}. Giving stays.`
-            : "Living can stay. Surplus or a lump sum is the bottleneck."
-    );
+    paintPlays(plan, sprint);
+    paintStream(finance, sprint);
 
     const note = document.getElementById("sprint-on-track-note");
     if (note) {
@@ -877,6 +1106,16 @@
         event.stopPropagation();
         addIncome();
       }
+      if (target.closest("[data-save-stream]")) {
+        event.preventDefault();
+        event.stopPropagation();
+        saveStream();
+      }
+      if (target.closest("[data-stream-earning]")) {
+        event.preventDefault();
+        event.stopPropagation();
+        markStreamEarning();
+      }
       const remove = target.closest("[data-remove-income]");
       if (remove) {
         event.preventDefault();
@@ -897,7 +1136,13 @@
     "input",
     (event) => {
       if (!(event.target instanceof HTMLInputElement)) return;
-      if (!FIELD_IDS.includes(event.target.id) && !isIncomeInput(event.target)) return;
+      if (
+        !FIELD_IDS.includes(event.target.id) &&
+        !isIncomeInput(event.target) &&
+        !isStreamField(event.target)
+      ) {
+        return;
+      }
       const ledger = readLedger();
       paintIncomeMeta(ledger.incomeSources);
       updateSurplus(ledger);
@@ -910,7 +1155,17 @@
     "focusout",
     (event) => {
       if (!(event.target instanceof HTMLInputElement)) return;
-      if (!FIELD_IDS.includes(event.target.id) && !isIncomeInput(event.target)) return;
+      if (
+        !FIELD_IDS.includes(event.target.id) &&
+        !isIncomeInput(event.target) &&
+        !isStreamField(event.target)
+      ) {
+        return;
+      }
+      if (isStreamField(event.target)) {
+        saveStream();
+        return;
+      }
       saveLedger(true);
     },
     true

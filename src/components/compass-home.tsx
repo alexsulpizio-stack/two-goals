@@ -70,7 +70,7 @@ export function CompassHome() {
           href="/steward"
           kicker="Goal 02"
           title="Live financially independent"
-          body={`In the next ${state.finance.targetMonths} months — by ${hydrated ? deadline : "this year"}. Spend less than you earn, give first, and close the gap before the deadline.`}
+          body={`In the next ${state.finance.targetMonths} months — by ${hydrated ? deadline : "this year"}. Create the income that hits the date. A smaller life is not the plan.`}
           tone="steward"
           cta="Open the sprint"
         />
@@ -123,9 +123,8 @@ export function CompassHome() {
                 </>
               ) : (
                 <p className="text-muted-foreground">
-                  Enter living and giving on Steward. Then it will name the one
-                  monthly shortfall, lump sum, or living ceiling that hits{" "}
-                  {deadline}.
+                  Enter living and giving on Steward. Then it sizes the new
+                  income you still have to create by {deadline}.
                 </p>
               )}
             </div>

@@ -9,7 +9,7 @@ const empty = nextMove(
   sprintPlan(defaultFinance),
   defaultFinance
 );
-assert.match(empty.headline, /living costs and giving/i);
+assert.match(empty.headline, /income you still have to create/i);
 assert.equal(empty.lines.length, 3);
 
 const givingOnly = {
@@ -46,7 +46,8 @@ const shortMove = nextMove(
   sprintPlan(short, 12),
   { ...short, targetMonths: 12 }
 );
-assert.match(shortMove.kicker, /pick one/i);
+assert.match(shortMove.kicker, /create income/i);
 assert.ok(shortMove.lines.length >= 2);
+assert.match(shortMove.lines[0] ?? "", /new stream/i);
 
 console.log("next-move tests passed");
