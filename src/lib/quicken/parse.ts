@@ -13,17 +13,43 @@ export function decodeQuickenBytes(buffer: ArrayBuffer): string {
   if (bytes.length >= 4 && bytes[0] !== 0 && bytes[1] === 0 && bytes[3] === 0) {
     return stripBom(new TextDecoder("utf-16le").decode(bytes));
   }
-  let text = new TextDecoder("utf-8").decode(bytes);
-  const sample = text.slice(0, 120);
-  const nuls = [...sample].filter((char) => char === "\u0000").length;
-  if (nuls > 8) {
-    text = new TextDecoder("utf-16le").decode(bytes);
+
+  const utf8 = stripBom(new TextDecoder("utf-8").decode(bytes));
+  if (looksLikeQuicken(utf8)) return utf8;
+
+  const utf16 = stripBom(new TextDecoder("utf-16le").decode(bytes));
+  if (looksLikeQuicken(utf16)) return utf16;
+
+  const latin1 = stripBom(new TextDecoder("latin1").decode(bytes));
+  if (looksLikeQuicken(latin1)) return latin1;
+
+  return utf8;
+}
+
+export function readAsArrayBuffer(file: Blob): Promise<ArrayBuffer> {
+  if (typeof file.arrayBuffer === "function") {
+    return file.arrayBuffer();
   }
-  return stripBom(text);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) resolve(reader.result);
+      else reject(new Error("Could not read the file into memory."));
+    };
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("The browser could not read that file."));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function looksLikeQuicken(text: string): boolean {
+  const compact = text.replace(/\u0000/g, "");
+  return /!Type:|!Account|!Option:/i.test(compact) || /Date,.+,Amount/i.test(compact);
 }
 
 export function parseQuickenFile(fileName: string, text: string): QuickenBundle {
   const lower = fileName.toLowerCase();
+  text = text.replace(/\u0000/g, "");
   const sample = text.slice(0, 200);
   if (
     sample.startsWith("PK") ||

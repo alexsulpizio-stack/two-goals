@@ -37,6 +37,9 @@ export function parseQifFile(fileName: string, text: string): QuickenBundle {
   let record: Record<string, string> = {};
   const splits: Array<{ category: string; amount: string; memo: string }> = [];
 
+  let skippedNoDate = 0;
+  let skippedInvest = 0;
+
   const flush = () => {
     if (mode === "account") {
       const name = record.N?.trim();
@@ -56,13 +59,17 @@ export function parseQifFile(fileName: string, text: string): QuickenBundle {
         if ("E" in record) categoryFlags[name] = "expense";
       }
     } else if (mode === "txn") {
-      pushTransactions(
-        transactions,
-        record,
-        splits,
-        accountName,
-        accountType
-      );
+      if (record.D || record.T || record.P || record.L || record.U || splits.length) {
+        const skipped = pushTransactions(
+          transactions,
+          record,
+          splits,
+          accountName,
+          accountType
+        );
+        skippedNoDate += skipped.noDate;
+        skippedInvest += skipped.invest;
+      }
     }
     record = {};
     splits.length = 0;
@@ -70,7 +77,7 @@ export function parseQifFile(fileName: string, text: string): QuickenBundle {
 
   const lines = stripBom(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   for (const rawLine of lines) {
-    const line = rawLine.replace(/^\u0000+/, "").trimEnd();
+    const line = rawLine.replace(/\u0000/g, "").replace(/^\uFEFF/, "").trim();
     if (!line) continue;
     if (line.startsWith("!")) {
       flush();
@@ -112,6 +119,16 @@ export function parseQifFile(fileName: string, text: string): QuickenBundle {
   }
   flush();
 
+  if (skippedNoDate > 0 && transactions.length === 0) {
+    warnings.push(
+      `${skippedNoDate} records had dates this reader could not parse, so nothing was counted.`
+    );
+  }
+  if (skippedInvest > 0 && transactions.length === 0) {
+    warnings.push(
+      `${skippedInvest} investment buys/sells were skipped. Export banking and cash-flow transactions, not only brokerage lots.`
+    );
+  }
   if (transactions.length === 0 && accounts.length === 0) {
     warnings.push("No Quicken accounts or transactions were found in this QIF file.");
   }
@@ -125,15 +142,17 @@ function pushTransactions(
   splits: Array<{ category: string; amount: string; memo: string }>,
   accountName: string,
   accountType: string
-) {
+): { noDate: number; invest: number } {
   const date = parseDate(record.D);
-  if (!date) return;
+  if (!date) return { noDate: 1, invest: 0 };
   const action = (record.N ?? "").trim();
   const payee = (record.P ?? record.Y ?? "").trim();
   const memo = (record.M ?? "").trim();
   const parentAmount = parseAmount(record.T) ?? parseAmount(record.U) ?? 0;
 
-  if (SKIP_INVESTMENT_ACTIONS.has(action.toLowerCase())) return;
+  if (SKIP_INVESTMENT_ACTIONS.has(action.toLowerCase())) {
+    return { noDate: 0, invest: 1 };
+  }
 
   if (splits.length > 0) {
     for (const split of splits) {
@@ -150,10 +169,12 @@ function pushTransactions(
         action,
       });
     }
-    return;
+    return { noDate: 0, invest: 0 };
   }
 
-  if (parentAmount === 0 && !record.T && !record.U) return;
+  if (parentAmount === 0 && !record.T && !record.U) {
+    return { noDate: 0, invest: 0 };
+  }
   transactions.push({
     date,
     amount: parentAmount,
@@ -164,6 +185,7 @@ function pushTransactions(
     accountType,
     action,
   });
+  return { noDate: 0, invest: 0 };
 }
 
 function stripBom(text: string): string {

@@ -1,4 +1,4 @@
-import { decodeQuickenBytes, parseQuickenFile } from "./parse";
+import { decodeQuickenBytes, parseQuickenFile, readAsArrayBuffer } from "./parse";
 import { mergeBundles, summarizeQuicken } from "./summarize";
 import type { QuickenBundle, QuickenSummary } from "./types";
 
@@ -13,20 +13,40 @@ export type ImportResult = {
   };
 };
 
+export function parseQuickenText(
+  fileName: string,
+  text: string
+): ImportResult {
+  return bundleToResult(parseQuickenFile(fileName, text), text);
+}
+
+export async function parseQuickenBytes(
+  fileName: string,
+  buffer: ArrayBuffer
+): Promise<ImportResult> {
+  return parseQuickenText(fileName, decodeQuickenBytes(buffer));
+}
+
 export async function parseQuickenSources(input: {
-  files?: Array<File | null | undefined>;
+  files?: Array<File | Blob | null | undefined>;
   paste?: string;
+  fileName?: string;
 }): Promise<ImportResult> {
   const bundles: QuickenBundle[] = [];
+  let lastText = "";
 
   for (const file of input.files ?? []) {
-    if (!file || file.size === 0) continue;
-    const text = decodeQuickenBytes(await file.arrayBuffer());
-    bundles.push(parseQuickenFile(file.name, text));
+    if (!file) continue;
+    const name =
+      file instanceof File ? file.name : (input.fileName ?? "import.qif");
+    const text = decodeQuickenBytes(await readAsArrayBuffer(file));
+    lastText = text;
+    bundles.push(parseQuickenFile(name, text));
   }
 
   const pasted = input.paste?.trim() ?? "";
   if (pasted) {
+    lastText = pasted;
     bundles.push(parseQuickenFile("pasted.qif", pasted));
   }
 
@@ -34,17 +54,32 @@ export async function parseQuickenSources(input: {
     return {
       ok: false,
       error:
-        "No file is chosen. Pick the .qif first — the name should stay visible — then click Read file.",
+        "Read file ran, but no file was in memory. Choose the .qif again, wait for “Loaded”, then click Read file.",
     };
   }
 
-  const merged = mergeBundles(bundles);
+  return bundleToResult(mergeBundles(bundles), lastText);
+}
+
+export async function parseQuickenFormData(
+  formData: FormData
+): Promise<ImportResult> {
+  return parseQuickenSources({
+    files: formData
+      .getAll("quicken")
+      .filter((value): value is File => value instanceof File),
+    paste: String(formData.get("paste") ?? ""),
+  });
+}
+
+function bundleToResult(merged: QuickenBundle, text: string): ImportResult {
   if (merged.transactions.length === 0 && merged.accounts.length === 0) {
+    const hint = firstLines(text);
+    const base =
+      merged.warnings[0] ?? "The file opened, but no transactions were found.";
     return {
       ok: false,
-      error:
-        merged.warnings[0] ??
-        "The file opened, but no transactions were found.",
+      error: hint ? `${base} Header: ${hint}` : base,
       fileName: merged.fileName,
     };
   }
@@ -60,11 +95,13 @@ export async function parseQuickenSources(input: {
   };
 }
 
-export async function parseQuickenFormData(
-  formData: FormData
-): Promise<ImportResult> {
-  return parseQuickenSources({
-    files: formData.getAll("quicken").filter((value): value is File => value instanceof File),
-    paste: String(formData.get("paste") ?? ""),
-  });
+function firstLines(text: string): string {
+  return text
+    .replace(/\u0000/g, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((line) => (line.length > 48 ? `${line.slice(0, 45)}…` : line))
+    .join(" · ");
 }

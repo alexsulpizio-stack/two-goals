@@ -8,6 +8,7 @@ import { parseCsvFile } from "../src/lib/quicken/csv";
 import {
   parseQuickenFormData,
   parseQuickenSources,
+  parseQuickenText,
 } from "../src/lib/quicken/from-form";
 import { parseAmount, parseDate } from "../src/lib/quicken/money";
 import { decodeQuickenBytes, parseQuickenFile } from "../src/lib/quicken/parse";
@@ -97,6 +98,7 @@ const recategorized = summarizeQuicken(csv, 12, { Groceries: "giving" });
 assert.ok(recategorized.monthlyGiving > summary.monthlyGiving);
 
 assert.equal(parseDate("3/15'26"), "2026-03-15");
+assert.equal(parseDate("3/15\u201926"), "2026-03-15");
 assert.equal(parseDate("12/25'93"), "1993-12-25");
 
 const apostropheQif = parseQifFile(
@@ -156,5 +158,19 @@ const named = await parseQuickenSources({
 assert.equal(named.ok, true);
 assert.equal(named.fileName, "2025data 11-18-2025.QIF");
 assert.equal(named.transactionCount, 7);
+
+const nulled = parseQuickenFile(
+  "n.qif",
+  "!T\u0000y\u0000p\u0000e\u0000:\u0000B\u0000a\u0000n\u0000k\nD3/15'26\nT-5.00\nPStore\nLGroceries\n^"
+);
+assert.equal(nulled.transactions.length, 1);
+assert.equal(nulled.transactions[0]?.amount, -5);
+
+const fromText = parseQuickenText(
+  "books.qif",
+  "!Type:Bank\nD3/15'26\nT8000\nPWork\nLSalary\n^"
+);
+assert.equal(fromText.ok, true);
+assert.equal(fromText.transactionCount, 1);
 
 console.log("quicken tests passed");

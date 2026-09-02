@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,12 +15,16 @@ import { todayKey } from "@/lib/dates";
 import { formatMoney } from "@/lib/finance";
 import { displayKind, nextKind, retotalSummary } from "@/lib/quicken";
 import {
-  parseQuickenSources,
+  parseQuickenBytes,
+  parseQuickenText,
   type ImportResult,
 } from "@/lib/quicken/from-form";
+import { readAsArrayBuffer } from "@/lib/quicken/parse";
 import type { WindowMonths } from "@/lib/quicken";
 import type { AppState, LedgerKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+type LoadedFile = { name: string; size: number; buffer: ArrayBuffer };
 
 export function QuickenImport({
   hydrated,
@@ -32,17 +37,17 @@ export function QuickenImport({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const pasteRef = useRef<HTMLTextAreaElement>(null);
-  const heldFile = useRef<File | null>(null);
+  const loadedRef = useRef<LoadedFile | null>(null);
+  const runId = useRef(0);
 
-  const [chosen, setChosen] = useState<{ name: string; size: number } | null>(
-    null
-  );
+  const [chosen, setChosen] = useState<string>("No file loaded yet.");
   const [payload, setPayload] = useState<ImportResult | null>(null);
   const [pending, setPending] = useState(false);
   const [windowMonths, setWindowMonths] = useState<WindowMonths>(12);
   const [showAll, setShowAll] = useState(false);
   const [applied, setApplied] = useState(false);
   const [showPaste, setShowPaste] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   const rawSummary = payload?.ok
     ? (payload.byWindow?.[windowMonths] ?? null)
@@ -52,46 +57,120 @@ export function QuickenImport({
     return retotalSummary(rawSummary, state.categoryOverrides);
   }, [rawSummary, state.categoryOverrides]);
 
-  function holdFile(file: File | null | undefined) {
-    if (!file || file.size === 0) return;
-    heldFile.current = file;
-    setChosen({ name: file.name, size: file.size });
-  }
+  const ingestBlob = useCallback(async (blob: Blob, name: string, reason: string) => {
+    const id = ++runId.current;
+    flushSync(() => {
+      setPending(true);
+      setApplied(false);
+      setChosen(`Loading ${name}…`);
+    });
+    await yieldToPaint();
+    try {
+      const buffer = await readAsArrayBuffer(blob);
+      if (id !== runId.current) return;
+      loadedRef.current = { name, size: buffer.byteLength, buffer };
+      setChosen(`Loaded ${name} · ${formatBytes(buffer.byteLength)}`);
+      await yieldToPaint();
+      if (id !== runId.current) return;
+      const result = await parseQuickenBytes(name, buffer);
+      if (id !== runId.current) return;
+      setPayload(result);
+    } catch (cause) {
+      if (id !== runId.current) return;
+      const message =
+        cause instanceof Error ? cause.message : "The file could not be read.";
+      setPayload({
+        ok: false,
+        error: `${reason} ran, then failed: ${message}`,
+      });
+    } finally {
+      if (id === runId.current) setPending(false);
+    }
+  }, []);
 
-  function onPick(list: FileList | null) {
-    holdFile(list?.[0]);
-  }
+  useEffect(() => {
+    const input = fileRef.current;
+    if (!input) return;
+    const onChange = () => {
+      const file = input.files?.[0];
+      if (file) void ingestBlob(file, file.name, "Chosen");
+    };
+    input.addEventListener("change", onChange);
+    input.addEventListener("input", onChange);
+    return () => {
+      input.removeEventListener("change", onChange);
+      input.removeEventListener("input", onChange);
+    };
+  }, [ingestBlob]);
 
   async function readFile() {
-    const live = fileRef.current?.files?.[0];
-    holdFile(live);
-    const file =
-      live && live.size > 0 ? live : heldFile.current;
-    const paste = pasteRef.current?.value ?? "";
-
-    if ((!file || file.size === 0) && !paste.trim()) {
-      setPayload({
-        ok: false,
-        error:
-          "No file is chosen. Pick the .qif first — the name should stay visible — then click Read file.",
-      });
-      return;
-    }
-
-    setPending(true);
-    setApplied(false);
+    const id = ++runId.current;
+    flushSync(() => {
+      setPending(true);
+      setApplied(false);
+    });
+    await yieldToPaint();
     try {
-      const result = await parseQuickenSources({
-        files: file ? [file] : [],
-        paste,
-      });
+      const live = fileRef.current?.files?.[0];
+      if (live) {
+        const buffer = await readAsArrayBuffer(live);
+        if (id !== runId.current) return;
+        loadedRef.current = {
+          name: live.name,
+          size: buffer.byteLength,
+          buffer,
+        };
+        setChosen(`Loaded ${live.name} · ${formatBytes(buffer.byteLength)}`);
+      }
+
+      const loaded = loadedRef.current;
+      const paste = pasteRef.current?.value?.trim() ?? "";
+      if (!loaded && !paste) {
+        setPayload({
+          ok: false,
+          error:
+            "Read file ran, but the QIF was not in memory yet. Choose the file again, wait until it says Loaded, then click Read file.",
+        });
+        return;
+      }
+
+      await yieldToPaint();
+      const result = paste
+        ? parseQuickenText("pasted.qif", paste)
+        : await parseQuickenBytes(loaded!.name, loaded!.buffer);
+      if (id !== runId.current) return;
       setPayload(result);
-    } catch {
-      setPayload({
-        ok: false,
-        error:
-          "The file could not be read in this browser. Try exporting QIF again from Quicken, or paste a few transactions below.",
-      });
+    } catch (cause) {
+      if (id !== runId.current) return;
+      const message =
+        cause instanceof Error ? cause.message : "The file could not be read.";
+      setPayload({ ok: false, error: `Read file ran, then failed: ${message}` });
+    } finally {
+      if (id === runId.current) setPending(false);
+    }
+  }
+
+  async function loadSample() {
+    flushSync(() => {
+      setPending(true);
+      setChosen("Loading sample QIF…");
+    });
+    await yieldToPaint();
+    try {
+      const response = await fetch("/samples/sample.qif");
+      if (!response.ok) throw new Error("Sample file was missing.");
+      const buffer = await response.arrayBuffer();
+      loadedRef.current = {
+        name: "sample.qif",
+        size: buffer.byteLength,
+        buffer,
+      };
+      setChosen(`Loaded sample.qif · ${formatBytes(buffer.byteLength)}`);
+      setPayload(await parseQuickenBytes("sample.qif", buffer));
+    } catch (cause) {
+      const message =
+        cause instanceof Error ? cause.message : "Sample failed.";
+      setPayload({ ok: false, error: message });
     } finally {
       setPending(false);
     }
@@ -143,14 +222,12 @@ export function QuickenImport({
     : [];
 
   const status = pending
-    ? `Reading ${chosen?.name ?? "the file"} on this page…`
+    ? "Reading the file now. Totals should appear below this box."
     : payload?.ok
       ? `Read ${payload.fileName}: ${payload.transactionCount} transactions. Totals are below.`
       : payload?.error
         ? payload.error
-        : chosen
-          ? `${chosen.name} is ready. Click Read file.`
-          : "Choose the file, then click Read file. The filename should stay visible.";
+        : "Choose a .qif (or drop it here). It should load on its own; Read file is a retry.";
 
   return (
     <Card className="bg-card/80">
@@ -162,38 +239,63 @@ export function QuickenImport({
       </CardHeader>
       <CardContent className="flex flex-col gap-5 pt-5">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Choose your .qif. The filename stays here. Then press Read file — you
-          should see monthly totals, not a blank picker and not the raw export.
+          Choose the .qif. Steward loads it immediately and should show monthly
+          totals without a second click. If it does not, press Read file — that
+          button must report a result, even when parsing fails.
         </p>
 
-        <div className="flex flex-col gap-4 rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-6">
+        <div
+          className={cn(
+            "flex flex-col gap-4 rounded-2xl border border-dashed bg-muted/30 px-4 py-6",
+            dragging ? "border-steward bg-steward/10" : "border-border"
+          )}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            const file = event.dataTransfer.files?.[0];
+            if (file) void ingestBlob(file, file.name, "Drop");
+          }}
+        >
           <label className="flex flex-col gap-2 text-sm font-medium">
             File
             <input
+              id="quicken-file-input"
               ref={fileRef}
               type="file"
               name="quicken"
               accept=".qif,.csv,.txt,.tsv,.QIF,.CSV"
               className="block w-full cursor-pointer text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-foreground"
-              onChange={(event) => onPick(event.target.files)}
-              onInput={(event) =>
-                onPick((event.target as HTMLInputElement).files)
-              }
             />
           </label>
-          <p className="text-sm" data-testid="chosen-file">
-            {chosen
-              ? `Chosen: ${chosen.name} · ${formatBytes(chosen.size)}`
-              : "No file chosen yet."}
+          <p className="text-sm font-medium" data-testid="chosen-file">
+            {chosen}
           </p>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => void readFile()}
-            className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-60"
-          >
-            {pending ? "Reading…" : "Read file"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              aria-busy={pending}
+              onClick={() => void readFile()}
+              className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+            >
+              {pending ? "Reading…" : "Read file"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void loadSample()}
+              className="inline-flex h-10 w-fit items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium hover:bg-muted"
+            >
+              Try a sample
+            </button>
+          </div>
           <p
             className={cn(
               "rounded-xl px-3 py-2 text-sm",
@@ -221,6 +323,13 @@ export function QuickenImport({
                 className="w-full rounded-lg border border-input bg-background px-2.5 py-2 font-mono text-xs"
                 placeholder={"!Type:Bank\nD3/15'26\nT-52.10\nPStore\nLGroceries\n^"}
               />
+              <button
+                type="button"
+                onClick={() => void readFile()}
+                className="inline-flex h-9 w-fit items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+              >
+                Read pasted text
+              </button>
             </label>
           ) : null}
         </div>
@@ -338,6 +447,14 @@ export function QuickenImport({
       </CardContent>
     </Card>
   );
+}
+
+function yieldToPaint() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, 40);
+    });
+  });
 }
 
 function formatBytes(size: number) {

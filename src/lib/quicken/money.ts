@@ -40,7 +40,9 @@ export function parseDate(raw: string | undefined | null): string | null {
     return toIso(year, month, day);
   }
 
-  const apostrophe = text.match(/^(\d{1,2})[/-](\d{1,2})'(\d{2,4})$/);
+  const apostrophe = text.match(
+    /^(\d{1,2})[/-](\d{1,2})\s*['\u2019]\s*(\d{2,4})$/
+  );
   if (apostrophe) {
     const month = Number(apostrophe[1]);
     const day = Number(apostrophe[2]);
