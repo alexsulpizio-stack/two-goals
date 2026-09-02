@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { classifyCategory } from "../src/lib/quicken/classify";
 import { parseCsvFile } from "../src/lib/quicken/csv";
+import { parseQuickenFormData } from "../src/lib/quicken/from-form";
 import { parseAmount, parseDate } from "../src/lib/quicken/money";
 import { decodeQuickenBytes, parseQuickenFile } from "../src/lib/quicken/parse";
 import { parseQifFile } from "../src/lib/quicken/qif";
@@ -126,5 +127,18 @@ const utf16 = new Uint8Array([
   0x00, 0x42, 0x00, 0x61, 0x00, 0x6e, 0x00, 0x6b, 0x00, 0x0a, 0x00,
 ]);
 assert.match(decodeQuickenBytes(utf16.buffer), /!Type:Bank/);
+
+const form = new FormData();
+form.set(
+  "paste",
+  "!Type:Bank\nD3/15'26\nT-52.10\nPStore\nLGroceries\n^"
+);
+const fromForm = await parseQuickenFormData(form);
+assert.equal(fromForm.ok, true);
+assert.equal(fromForm.transactionCount, 1);
+assert.equal(fromForm.fileName, "pasted.qif");
+
+const emptyForm = await parseQuickenFormData(new FormData());
+assert.equal(emptyForm.ok, false);
 
 console.log("quicken tests passed");

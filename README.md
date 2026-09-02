@@ -43,6 +43,6 @@ There is no Quicken API to log into. Export from the books you already keep, the
 1. **Transactions:** File → File Export → QIF file (include Transactions, Account List, and Category List). Or a Transaction report → Export to Excel → save as CSV.
 2. **Balances:** a Net Worth report → Export to Excel → save as CSV.
 
-The importer averages income, living costs, and giving over the last 3 or 12 months, skips transfers, treats tithe/charity categories as giving, and builds invested net worth from cash, brokerage, and retirement accounts (not the house). You can click a category to recast it before applying to the ledger. Nothing is uploaded.
+The importer averages income, living costs, and giving over the last 3 or 12 months, skips transfers, treats tithe/charity categories as giving, and builds invested net worth from cash, brokerage, and retirement accounts (not the house). You can click a category to recast it before applying to the ledger. Nothing is uploaded: Read file parses in the browser and stays on Steward, showing monthly totals rather than the raw QIF.
 
 This is a planning sketch, not advice. Scripture quotations are from the World English Bible (public domain).

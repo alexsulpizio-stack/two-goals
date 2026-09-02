@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,20 +13,13 @@ import {
 import { todayKey } from "@/lib/dates";
 import { formatMoney } from "@/lib/finance";
 import { displayKind, nextKind, retotalSummary } from "@/lib/quicken";
-import type { QuickenSummary, WindowMonths } from "@/lib/quicken";
+import {
+  parseQuickenFormData,
+  type ImportResult,
+} from "@/lib/quicken/from-form";
+import type { WindowMonths } from "@/lib/quicken";
 import type { AppState, LedgerKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-type ImportResponse = {
-  ok: boolean;
-  error?: string;
-  fileName?: string;
-  transactionCount?: number;
-  byWindow?: {
-    3: QuickenSummary;
-    12: QuickenSummary;
-  };
-};
 
 export function QuickenImport({
   hydrated,
@@ -37,56 +30,37 @@ export function QuickenImport({
   state: AppState;
   setState: (updater: (previous: AppState) => AppState) => void;
 }) {
-  const noteRef = useRef<HTMLParagraphElement>(null);
+  const [payload, setPayload] = useState<ImportResult | null>(null);
+  const [pending, setPending] = useState(false);
   const [windowMonths, setWindowMonths] = useState<WindowMonths>(12);
-  const [payload, setPayload] = useState<ImportResponse | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [applied, setApplied] = useState(false);
-  const [pending, setPending] = useState(false);
+  const [showPaste, setShowPaste] = useState(false);
 
-  const rawSummary = payload?.ok ? payload.byWindow?.[windowMonths] ?? null : null;
+  const rawSummary = payload?.ok
+    ? (payload.byWindow?.[windowMonths] ?? null)
+    : null;
   const summary = useMemo(() => {
     if (!rawSummary) return null;
     return retotalSummary(rawSummary, state.categoryOverrides);
   }, [rawSummary, state.categoryOverrides]);
 
-  function note(text: string) {
-    if (noteRef.current) noteRef.current.textContent = text;
-  }
-
-  async function submitForm(form: HTMLFormElement) {
-    note("Read file clicked. Uploading to the parser…");
+  async function onReadFile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    event.stopPropagation();
     setPending(true);
     setApplied(false);
     try {
-      const body = new FormData(form);
-      const file = body.get("quicken");
-      const paste = String(body.get("paste") ?? "").trim();
-      if (!(file instanceof File && file.size > 0) && !paste) {
-        const message =
-          "The form did not receive a file. Choose 2025data again, then click Read file.";
-        note(message);
-        setPayload({ ok: false, error: message });
-        return;
-      }
-      if (file instanceof File && file.size > 0) {
-        note(`Uploading ${file.name} (${Math.max(1, Math.round(file.size / 1024))} KB)…`);
-      }
-      const response = await fetch("/api/quicken", { method: "POST", body });
-      const data = (await response.json()) as ImportResponse;
-      setPayload(data);
-      if (data.ok) {
-        note(
-          `Read ${data.fileName}: ${data.transactionCount} transactions. Totals are below. Click Apply to the ledger.`
-        );
-      } else {
-        note(data.error ?? "The file could not be parsed.");
-      }
-    } catch (cause) {
-      const message =
-        cause instanceof Error ? cause.message : "The upload failed.";
-      note(message);
-      setPayload({ ok: false, error: message });
+      const result = await parseQuickenFormData(
+        new FormData(event.currentTarget)
+      );
+      setPayload(result);
+    } catch {
+      setPayload({
+        ok: false,
+        error:
+          "The file could not be read in this browser. Try exporting QIF again from Quicken, or paste a few transactions below.",
+      });
     } finally {
       setPending(false);
     }
@@ -129,7 +103,6 @@ export function QuickenImport({
       },
     }));
     setApplied(true);
-    note("Applied to the ledger. The 6–12 month sprint now uses these numbers.");
   }
 
   const visibleCategories = summary
@@ -137,6 +110,14 @@ export function QuickenImport({
         .filter((item) => item.kind !== "transfer")
         .slice(0, showAll ? undefined : 12)
     : [];
+
+  const status = pending
+    ? "Reading your export on this page. You should not leave Steward."
+    : payload?.ok
+      ? `Read ${payload.fileName}: ${payload.transactionCount} transactions. Totals are below — not the raw file.`
+      : payload?.error
+        ? payload.error
+        : "Choose the file, then click Read file. Steward will show monthly totals, not the QIF text.";
 
   return (
     <Card className="bg-card/80">
@@ -148,19 +129,14 @@ export function QuickenImport({
       </CardHeader>
       <CardContent className="flex flex-col gap-5 pt-5">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Choose your .qif, then press <span className="font-medium text-foreground">Read file</span>.
-          A status line will appear directly under that button even if parsing fails.
+          Choose your .qif, then press Read file. Stay here. You should see
+          income, living, and giving — never a page of raw export text. If that
+          dump still appears, use Back and refresh this page once.
         </p>
 
         <form
           className="flex flex-col gap-4 rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-6"
-          action="/api/quicken"
-          method="post"
-          encType="multipart/form-data"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitForm(event.currentTarget);
-          }}
+          onSubmit={onReadFile}
         >
           <label className="flex flex-col gap-2 text-sm font-medium">
             File
@@ -173,33 +149,41 @@ export function QuickenImport({
           </label>
           <button
             type="submit"
-            className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+            disabled={pending}
+            className="inline-flex h-10 w-fit items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-60"
           >
             {pending ? "Reading…" : "Read file"}
           </button>
           <p
-            ref={noteRef}
-            className="min-h-6 text-sm text-foreground"
+            className={cn(
+              "rounded-xl px-3 py-2 text-sm",
+              payload?.ok === false
+                ? "border border-destructive/30 bg-destructive/5 text-destructive"
+                : "border border-steward/20 bg-steward/5"
+            )}
             role="status"
           >
-            Waiting for a file.
+            {status}
           </p>
-          <label className="flex flex-col gap-2 text-sm font-medium">
-            Or paste QIF text
-            <textarea
-              name="paste"
-              rows={6}
-              className="w-full rounded-lg border border-input bg-background px-2.5 py-2 font-mono text-xs"
-              placeholder={"!Type:Bank\nD3/15'26\nT-52.10\nPStore\nLGroceries\n^"}
-            />
-          </label>
+          <button
+            type="button"
+            className="self-start text-sm text-muted-foreground underline-offset-4 hover:underline"
+            onClick={() => setShowPaste((value) => !value)}
+          >
+            {showPaste ? "Hide paste box" : "Paste QIF text instead"}
+          </button>
+          {showPaste ? (
+            <label className="flex flex-col gap-2 text-sm font-medium">
+              Paste
+              <textarea
+                name="paste"
+                rows={5}
+                className="w-full rounded-lg border border-input bg-background px-2.5 py-2 font-mono text-xs"
+                placeholder={"!Type:Bank\nD3/15'26\nT-52.10\nPStore\nLGroceries\n^"}
+              />
+            </label>
+          ) : null}
         </form>
-
-        {payload?.ok === false ? (
-          <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {payload.error}
-          </p>
-        ) : null}
 
         {hydrated && state.lastQuicken && !payload?.ok ? (
           <p className="text-sm text-muted-foreground">
@@ -240,9 +224,18 @@ export function QuickenImport({
             </div>
 
             <dl className="grid gap-3 sm:grid-cols-4">
-              <Metric label="Monthly income" value={formatMoney(summary.monthlyIncome)} />
-              <Metric label="Monthly living" value={formatMoney(summary.monthlyExpenses)} />
-              <Metric label="Monthly giving" value={formatMoney(summary.monthlyGiving)} />
+              <Metric
+                label="Monthly income"
+                value={formatMoney(summary.monthlyIncome)}
+              />
+              <Metric
+                label="Monthly living"
+                value={formatMoney(summary.monthlyExpenses)}
+              />
+              <Metric
+                label="Monthly giving"
+                value={formatMoney(summary.monthlyGiving)}
+              />
               <Metric
                 label="Invested net worth"
                 value={
