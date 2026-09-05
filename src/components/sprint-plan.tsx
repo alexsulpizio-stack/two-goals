@@ -2,8 +2,11 @@
 
 import { addMonths, formatMonthYear } from "@/lib/dates";
 import {
+  balanceSheetPosition,
   formatMoney,
   formatPercent,
+  independencePlan,
+  sprintPlan,
   type IndependencePlan,
   type SprintPlan,
   SPRINT_WINDOWS,
@@ -14,11 +17,11 @@ import type { FinanceInputs, SprintMonths } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function SprintBoard({
-  plan,
-  sprint,
+  plan: _plan,
+  sprint: _sprint,
   finance,
   targetMonths,
-  hasInputs,
+  hasInputs: _hasInputs,
   onTargetMonths,
 }: {
   plan: IndependencePlan;
@@ -28,9 +31,24 @@ export function SprintBoard({
   hasInputs: boolean;
   onTargetMonths: (months: SprintMonths) => void;
 }) {
+  // The Window should reflect every balance-sheet input on Steward. The core
+  // historical ledger stores invested assets in netWorth, so normalize the
+  // current balance sheet into an effective capital figure for this live view.
+  const effectiveCapital = Math.max(0, balanceSheetPosition(finance));
+  const windowFinance: FinanceInputs = {
+    ...finance,
+    netWorth: effectiveCapital,
+    cash: 0,
+    emergencyReserve: 0,
+    debt: 0,
+  };
+  const plan = independencePlan(windowFinance);
+  const sprint = sprintPlan(windowFinance, targetMonths);
+  const hasInputs = plan.hasInputs;
+
   const deadline = formatMonthYear(addMonths(new Date(), targetMonths));
   const sisterWindow: SprintMonths = targetMonths === 6 ? 12 : 6;
-  const move = nextMove(plan, sprint, finance);
+  const move = nextMove(plan, sprint, windowFinance);
   const offTrack = hasInputs && plan.fiNumber > 0 && !sprint.reached && !sprint.onTrack;
   const ready = hasInputs && plan.fiNumber > 0;
   const plays = incomePlays({ plan, sprint, ready });
@@ -78,7 +96,7 @@ export function SprintBoard({
       </div>
 
       <div
-        id="move-box"
+        id="window-move-box"
         className={cn(
           "rounded-2xl p-6 text-white sm:p-8",
           !hasInputs || sprint.reached || sprint.onTrack
@@ -87,84 +105,56 @@ export function SprintBoard({
         )}
       >
         <p
-          id="move-kicker"
+          id="window-move-kicker"
           className="text-xs tracking-[0.22em] text-white/70 uppercase"
         >
           {move.kicker}
         </p>
         <p
-          id="move-headline"
+          id="window-move-headline"
           className="font-heading mt-3 text-3xl leading-tight sm:text-4xl"
         >
           {move.headline}
         </p>
         <ul className="mt-6 flex flex-col gap-2 text-base leading-relaxed text-white/90 sm:text-lg">
-          <li id="move-line-surplus">{lines[0]}</li>
-          <li id="move-line-lump">{lines[1]}</li>
-          <li id="move-line-living">{lines[2]}</li>
+          <li>{lines[0]}</li>
+          <li>{lines[1]}</li>
+          <li>{lines[2]}</li>
         </ul>
-        <p
-          id="move-footer"
-          className="mt-6 text-sm leading-relaxed text-white/75"
-        >
+        <p className="mt-6 text-sm leading-relaxed text-white/75">
           {move.footer}
         </p>
         <dl className="mt-8 grid gap-4 border-t border-white/20 pt-6 sm:grid-cols-3">
           <SprintStat
-            id="stat-fi"
             label="Nest egg to hit"
             value={plan.fiNumber > 0 ? formatMoney(plan.fiNumber) : "—"}
           />
           <SprintStat
-            id="stat-have"
             label="You have"
-            value={hasInputs ? formatMoney(finance.netWorth) : "—"}
+            value={hasInputs ? formatMoney(effectiveCapital) : "—"}
           />
           <SprintStat
-            id="stat-gap"
             label="Still to close"
             value={
               plan.fiNumber > 0
-                ? formatMoney(Math.max(0, plan.fiNumber - finance.netWorth))
+                ? formatMoney(Math.max(0, plan.fiNumber - effectiveCapital))
                 : "—"
             }
           />
         </dl>
       </div>
 
-      <div id="sprint-levers" className="grid gap-4 lg:grid-cols-3">
-        <Lever
-          kickerId="lever-surplus-kicker"
-          titleId="lever-surplus-title"
-          figureId="lever-surplus-figure"
-          noteId="lever-surplus-note"
-          bodyId="lever-surplus-body"
-          play={plays[0]}
-        />
-        <Lever
-          kickerId="lever-lump-kicker"
-          titleId="lever-lump-title"
-          figureId="lever-lump-figure"
-          noteId="lever-lump-note"
-          bodyId="lever-lump-body"
-          play={plays[1]}
-        />
-        <Lever
-          kickerId="lever-living-kicker"
-          titleId="lever-living-title"
-          figureId="lever-living-figure"
-          noteId="lever-living-note"
-          bodyId="lever-living-body"
-          play={plays[2]}
-        />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Lever play={plays[0]} />
+        <Lever play={plays[1]} />
+        <Lever play={plays[2]} />
       </div>
 
-      <p id="living-footnote" className="text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         {livingFootnote(sprint, ready)}
       </p>
 
       <p
-        id="sprint-on-track-note"
         className="text-sm text-muted-foreground"
         hidden={!hasInputs || !sprint.onTrack || sprint.reached}
       >
@@ -177,18 +167,16 @@ export function SprintBoard({
 }
 
 function SprintStat({
-  id,
   label,
   value,
 }: {
-  id: string;
   label: string;
   value: string;
 }) {
   return (
     <div>
       <dt className="text-sm text-white/70">{label}</dt>
-      <dd id={id} className="font-heading text-2xl">
+      <dd className="font-heading text-2xl">
         {value}
       </dd>
     </div>
@@ -196,18 +184,8 @@ function SprintStat({
 }
 
 function Lever({
-  kickerId,
-  titleId,
-  figureId,
-  noteId,
-  bodyId,
   play,
 }: {
-  kickerId: string;
-  titleId: string;
-  figureId: string;
-  noteId: string;
-  bodyId: string;
   play: {
     kicker: string;
     title: string;
@@ -218,25 +196,19 @@ function Lever({
 }) {
   return (
     <article className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5">
-      <p
-        id={kickerId}
-        className="text-xs tracking-[0.18em] text-muted-foreground uppercase"
-      >
+      <p className="text-xs tracking-[0.18em] text-muted-foreground uppercase">
         {play.kicker}
       </p>
-      <p id={titleId} className="font-heading text-2xl leading-tight">
+      <p className="font-heading text-2xl leading-tight">
         {play.title}
       </p>
-      <p id={figureId} className="font-heading text-3xl text-steward">
+      <p className="font-heading text-3xl text-steward">
         {play.figure}
       </p>
-      <p
-        id={noteId}
-        className="text-xs tracking-wide text-muted-foreground uppercase"
-      >
+      <p className="text-xs tracking-wide text-muted-foreground uppercase">
         {play.figureNote}
       </p>
-      <p id={bodyId} className="text-sm leading-relaxed text-muted-foreground">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         {play.body}
       </p>
     </article>
