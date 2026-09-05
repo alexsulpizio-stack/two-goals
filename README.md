@@ -29,6 +29,14 @@ npm test
 npm run build
 ```
 
+## Your data
+
+Two Goals is local-first. It tries to save your entries in browser local storage. If that is unavailable, it falls back to session storage and then to in-memory state. The footer shows which storage mode is active.
+
+Use **Export backup** to download a portable JSON backup containing your practices, prayers, financial entries, ledger history, and Counsel answers. **Restore backup** validates and imports that file. Reset requires two confirmations because it erases all locally stored Two Goals data.
+
+Backups are not encrypted. Store them somewhere appropriate for the sensitivity of your prayers and financial information.
+
 ## How independence is calculated
 
 FI number = (annual living expenses + annual giving) ÷ safe withdrawal rate.

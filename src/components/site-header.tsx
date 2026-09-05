@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 
+import { DataSafety } from "@/components/data-safety";
 import { Mark } from "@/components/mark";
 import { cn } from "@/lib/utils";
 
@@ -55,11 +56,14 @@ export function SiteHeader() {
 export function SiteFooter() {
   return (
     <footer className="mt-auto border-t border-border/70">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-4 py-6 text-sm text-muted-foreground sm:flex-row sm:items-baseline sm:justify-between sm:px-6">
-        <p className="font-heading text-base text-foreground/80">
-          Seek first the kingdom.
-        </p>
-        <p>Numbers stay on this device. Scripture from the World English Bible.</p>
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:px-6">
+        <DataSafety />
+        <div className="flex flex-col gap-1 text-sm text-muted-foreground sm:flex-row sm:items-baseline sm:justify-between">
+          <p className="font-heading text-base text-foreground/80">
+            Seek first the kingdom.
+          </p>
+          <p>Private by default. Export a backup whenever the data matters.</p>
+        </div>
       </div>
     </footer>
   );
