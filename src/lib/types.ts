@@ -25,6 +25,9 @@ export type NextStream = {
 
 export type FinanceInputs = {
   netWorth: number;
+  cash: number;
+  emergencyReserve: number;
+  debt: number;
   monthlyIncome: number;
   monthlyExpenses: number;
   monthlyGiving: number;
@@ -32,6 +35,7 @@ export type FinanceInputs = {
   nextStream: NextStream;
   expectedReturn: number;
   swr: number;
+  estimatedTaxRate: number;
   targetMonths: SprintMonths;
 };
 
@@ -71,6 +75,9 @@ export const emptyPractice = (): PracticeDay => ({
 
 export const defaultFinance: FinanceInputs = {
   netWorth: 0,
+  cash: 0,
+  emergencyReserve: 0,
+  debt: 0,
   monthlyIncome: 0,
   monthlyExpenses: 0,
   monthlyGiving: 0,
@@ -78,6 +85,7 @@ export const defaultFinance: FinanceInputs = {
   nextStream: { name: "", monthly: 0, ask: "", status: "blank" },
   expectedReturn: 5,
   swr: 4,
+  estimatedTaxRate: 25,
   targetMonths: 12,
 };
 
