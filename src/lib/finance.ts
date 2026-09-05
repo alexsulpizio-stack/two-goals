@@ -42,13 +42,16 @@ function resolvedMonthlyIncome(finance: FinanceInputs): number {
 }
 
 export function fiCapital(finance: FinanceInputs): number {
+  return Math.max(0, finance.netWorth);
+}
+
+export function balanceSheetPosition(finance: FinanceInputs): number {
   const invested = Math.max(0, finance.netWorth);
   const spendableCash = Math.max(
     0,
     Math.max(0, finance.cash) - Math.max(0, finance.emergencyReserve)
   );
-  const debt = Math.max(0, finance.debt);
-  return Math.max(0, invested + spendableCash - debt);
+  return invested + spendableCash - Math.max(0, finance.debt);
 }
 
 export function grossIncomeForTakeHome(
@@ -78,13 +81,11 @@ export function independencePlan(finance: FinanceInputs): IndependencePlan {
     capital > 0 ||
     monthlyIncome > 0 ||
     finance.monthlyExpenses > 0 ||
-    finance.monthlyGiving > 0 ||
-    finance.debt > 0;
+    finance.monthlyGiving > 0;
 
   const reached = fiNumber > 0 && capital >= fiNumber;
   const progress =
     fiNumber <= 0 ? 0 : Math.min(1, Math.max(0, capital / fiNumber));
-
   const monthsRemaining = reached
     ? 0
     : monthsToTarget({
@@ -122,21 +123,14 @@ export function monthsToTarget({
 }): number | null {
   if (target <= 0) return null;
   if (present >= target) return 0;
-
   const monthlyRate = Math.pow(1 + annualRate, 1 / 12) - 1;
-
   if (Math.abs(monthlyRate) < 1e-12) {
     if (monthlyContribution <= 0) return null;
     return (target - present) / monthlyContribution;
   }
-
   const numerator = target * monthlyRate + monthlyContribution;
   const denominator = present * monthlyRate + monthlyContribution;
-
-  if (denominator <= 0 || numerator / denominator <= 1) {
-    return null;
-  }
-
+  if (denominator <= 0 || numerator / denominator <= 1) return null;
   return Math.log(numerator / denominator) / Math.log(1 + monthlyRate);
 }
 
@@ -158,21 +152,12 @@ export function formatDuration(months: number | null): string {
   if (months === null) return "Not on a path yet";
   if (months <= 0) return "Already there";
   if (months < 1) return "This month";
-
   const total = Math.ceil(months);
   const years = Math.floor(total / 12);
   const remainingMonths = total % 12;
-
-  if (years === 0) {
-    return remainingMonths === 1 ? "1 month" : `${remainingMonths} months`;
-  }
-  if (remainingMonths === 0) {
-    return years === 1 ? "1 year" : `${years} years`;
-  }
-  const yearLabel = years === 1 ? "1 year" : `${years} years`;
-  const monthLabel =
-    remainingMonths === 1 ? "1 month" : `${remainingMonths} months`;
-  return `${yearLabel}, ${monthLabel}`;
+  if (years === 0) return remainingMonths === 1 ? "1 month" : `${remainingMonths} months`;
+  if (remainingMonths === 0) return years === 1 ? "1 year" : `${years} years`;
+  return `${years === 1 ? "1 year" : `${years} years`}, ${remainingMonths === 1 ? "1 month" : `${remainingMonths} months`}`;
 }
 
 export function futureValue({
@@ -188,14 +173,9 @@ export function futureValue({
 }): number {
   if (months <= 0) return present;
   const monthlyRate = Math.pow(1 + annualRate, 1 / 12) - 1;
-  if (Math.abs(monthlyRate) < 1e-12) {
-    return present + monthlyContribution * months;
-  }
+  if (Math.abs(monthlyRate) < 1e-12) return present + monthlyContribution * months;
   const growth = Math.pow(1 + monthlyRate, months);
-  return (
-    present * growth +
-    monthlyContribution * ((growth - 1) / monthlyRate)
-  );
+  return present * growth + monthlyContribution * ((growth - 1) / monthlyRate);
 }
 
 export function requiredMonthlyContribution({
@@ -212,9 +192,7 @@ export function requiredMonthlyContribution({
   if (present >= target) return 0;
   if (months <= 0) return Number.POSITIVE_INFINITY;
   const monthlyRate = Math.pow(1 + annualRate, 1 / 12) - 1;
-  if (Math.abs(monthlyRate) < 1e-12) {
-    return (target - present) / months;
-  }
+  if (Math.abs(monthlyRate) < 1e-12) return (target - present) / months;
   const growth = Math.pow(1 + monthlyRate, months);
   return ((target - present * growth) * monthlyRate) / (growth - 1);
 }
@@ -232,9 +210,7 @@ export function requiredPresentValue({
 }): number {
   if (months <= 0) return target;
   const monthlyRate = Math.pow(1 + annualRate, 1 / 12) - 1;
-  if (Math.abs(monthlyRate) < 1e-12) {
-    return target - monthlyContribution * months;
-  }
+  if (Math.abs(monthlyRate) < 1e-12) return target - monthlyContribution * months;
   const growth = Math.pow(1 + monthlyRate, months);
   const annuity = monthlyContribution * ((growth - 1) / monthlyRate);
   return (target - annuity) / growth;
@@ -257,34 +233,26 @@ export function maxExpensesForDeadline({
 }): number | null {
   const withdrawal = swr > 0 ? swr : 0.04;
   const giving = Math.max(0, monthlyGiving);
-
   const hits = (expenses: number) => {
     const living = Math.max(0, expenses);
     const target = (12 * (living + giving)) / withdrawal;
     const contribution = monthlyIncome - living - giving;
-    return (
-      futureValue({
-        present: Math.max(0, netWorth),
-        monthlyContribution: contribution,
-        months,
-        annualRate,
-      }) >=
-      target - 0.5
-    );
+    return futureValue({
+      present: Math.max(0, netWorth),
+      monthlyContribution: contribution,
+      months,
+      annualRate,
+    }) >= target - 0.5;
   };
-
   if (!hits(0)) return null;
-
   let low = 0;
   let high = Math.max(monthlyIncome, 1) * 4;
   if (hits(high)) return high;
-
   for (let index = 0; index < 48; index += 1) {
     const mid = (low + high) / 2;
     if (hits(mid)) low = mid;
     else high = mid;
   }
-
   return Math.max(0, Math.floor(low));
 }
 
@@ -305,33 +273,18 @@ export function sprintPlan(
   const reached = plan.reached;
   const requiredMonthlySavings = reached
     ? 0
-    : Math.max(
-        0,
-        requiredMonthlyContribution({
-          present,
-          target: plan.fiNumber,
-          months,
-          annualRate,
-        })
-      );
-  const extraMonthlySavings = Math.max(
-    0,
-    requiredMonthlySavings - plan.monthlySavings
-  );
+    : Math.max(0, requiredMonthlyContribution({ present, target: plan.fiNumber, months, annualRate }));
+  const extraMonthlySavings = Math.max(0, requiredMonthlySavings - plan.monthlySavings);
   const monthlyMargin = plan.monthlySavings - requiredMonthlySavings;
   const lumpSumNeeded = reached
     ? 0
-    : Math.max(
-        0,
-        requiredPresentValue({
-          target: plan.fiNumber,
-          monthlyContribution: plan.monthlySavings,
-          months,
-          annualRate,
-        }) - present
-      );
-  const onTrack =
-    reached || (plan.fiNumber > 0 && projectedNetWorth >= plan.fiNumber - 1);
+    : Math.max(0, requiredPresentValue({
+        target: plan.fiNumber,
+        monthlyContribution: plan.monthlySavings,
+        months,
+        annualRate,
+      }) - present);
+  const onTrack = reached || (plan.fiNumber > 0 && projectedNetWorth >= plan.fiNumber - 1);
   const maxMonthlyExpenses = maxExpensesForDeadline({
     netWorth: present,
     monthlyIncome,
@@ -340,19 +293,12 @@ export function sprintPlan(
     annualRate,
     swr: finance.swr / 100,
   });
-  const expenseCutNeeded =
-    maxMonthlyExpenses === null
-      ? 0
-      : Math.max(0, finance.monthlyExpenses - maxMonthlyExpenses);
-  const requiredMonthlyIncome =
-    requiredMonthlySavings +
-    finance.monthlyExpenses +
-    finance.monthlyGiving;
+  const expenseCutNeeded = maxMonthlyExpenses === null
+    ? 0
+    : Math.max(0, finance.monthlyExpenses - maxMonthlyExpenses);
+  const requiredMonthlyIncome = requiredMonthlySavings + finance.monthlyExpenses + finance.monthlyGiving;
   const incomeLift = Math.max(0, requiredMonthlyIncome - monthlyIncome);
-  const grossIncomeLift = grossIncomeForTakeHome(
-    incomeLift,
-    finance.estimatedTaxRate
-  );
+  const grossIncomeLift = grossIncomeForTakeHome(incomeLift, finance.estimatedTaxRate);
 
   return {
     months,
