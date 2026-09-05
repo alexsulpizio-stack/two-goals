@@ -18,10 +18,10 @@ npm run dev
 
 Open [http://localhost:43147](http://localhost:43147).
 
-- **Compass** — both goals, the verse of the day, and today’s practices
+- **Compass** — both goals, the verse of the day, today’s practices, and one prioritized next action
 - **Walk** — abiding practices and a private prayer journal
-- **Steward** — 6- or 12-month sprint, the income you still have to create, a named stream for this week, and the ledger
-- **Counsel** — a 22-question interview that turns your answers into this week’s actions, with honest confidence about what can and cannot be known yet
+- **Steward** — 6- or 12-month sprint, plain-English income gap, gross-income estimate, scenario comparison, balance-sheet safety fields, trends, a named stream for this week, and the ledger
+- **Counsel** — a 22-question interview that turns your answers into this week’s actions, with honest confidence about what can and cannot be known yet; completed answers can be revised individually without restarting
 
 ```bash
 npm run lint
@@ -43,10 +43,12 @@ FI number = (annual living expenses + annual giving) ÷ safe withdrawal rate.
 
 Years remaining assume monthly savings keep going and invested assets earn the real return you set. Default return is 5% after inflation; default withdrawal is 4%.
 
-The 6- and 12-month sprint then asks: what new take-home would actually hit that FI number inside the window. One new stream, two smaller streams, or more from work you already have. Living cuts are a last resort, not the move.
+The FI sprint continues to use the invested-assets ledger as its capital base so historical rows remain comparable. Steward now also tracks cash, an emergency reserve, and debt as a separate balance-sheet safety check rather than silently folding those balances into the historical FI series.
+
+The 6- and 12-month sprint asks what new **take-home** income would actually hit that FI number inside the window. An optional estimated tax rate translates that take-home gap into an approximate gross-income target. Conservative, expected, and optimistic real-return scenarios show how sensitive the deadline is to the return assumption.
 
 The ledger records what already exists. Steward leads with what you will create. Name the stream, write this week’s ask, and when the first dollar arrives, put it on the ledger. Giving stays in the target. The page does not earn the money. You make the ask.
 
 Counsel interviews you before you invent a product. It is confident about the questions. It is only as confident about this week as your names, hours, and offer. It will not claim the 6–12 month date is honest if your hours × a rate you could get this month cannot cover the gap.
 
-This is a planning sketch, not advice. Scripture quotations are from the World English Bible (public domain).
+This is a planning sketch, not financial, tax, legal, or investment advice. Scripture quotations are from the World English Bible (public domain).
