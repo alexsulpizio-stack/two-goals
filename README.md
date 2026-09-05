@@ -20,7 +20,7 @@ Open [http://localhost:43147](http://localhost:43147).
 
 - **Compass** — both goals, the verse of the day, today’s practices, and one prioritized next action
 - **Walk** — abiding practices and a private prayer journal
-- **Steward** — 6- or 12-month sprint, plain-English income gap, gross-income estimate, scenario comparison, balance-sheet safety fields, trends, a named stream for this week, and the ledger
+- **Steward** — 6- or 12-month sprint, plain-English income gap, gross-income estimate, scenario comparison, balance-sheet safety fields, trends, Quicken Classic import, a named stream for this week, and the ledger
 - **Counsel** — a 22-question interview that turns your answers into this week’s actions, with honest confidence about what can and cannot be known yet; completed answers can be revised individually without restarting
 
 ```bash
@@ -36,6 +36,16 @@ Two Goals is local-first. It tries to save your entries in browser local storage
 Use **Export backup** to download a portable JSON backup containing your practices, prayers, financial entries, ledger history, and Counsel answers. **Restore backup** validates and imports that file. Reset requires two confirmations because it erases all locally stored Two Goals data.
 
 Backups are not encrypted. Store them somewhere appropriate for the sensitivity of your prayers and financial information.
+
+## Quicken Classic for Windows
+
+Steward can import **QIF** and **CSV** exports from Quicken Classic for Windows. The file is parsed locally in the browser; Two Goals does not upload the raw Quicken export. Before anything changes, the importer shows a review screen where each detected value can be edited, unchecked, or approved.
+
+When transaction history is present, Two Goals uses up to the three most recent months in the file to suggest average monthly income, living expenses, and giving. Transfers are ignored. Giving is detected from category names such as giving, tithe, charity, donation, offering, and ministry. Because category conventions vary, these are suggestions and should be reviewed before applying.
+
+When recognizable account balances are present, the importer can also suggest invested assets, cash, and debt. Applying imported monthly income intentionally replaces the existing Steward income-source list with a single **Quicken average** source so the same income is not counted twice.
+
+QXF files are not supported yet. Export QIF or CSV from Quicken Classic instead.
 
 ## How independence is calculated
 
