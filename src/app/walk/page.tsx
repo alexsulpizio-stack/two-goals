@@ -1,5 +1,5 @@
-import { WalkView } from "@/components/walk-view";
+import { WalkToday } from "@/components/walk-today";
 
 export default function WalkPage() {
-  return <WalkView />;
+  return <WalkToday />;
 }

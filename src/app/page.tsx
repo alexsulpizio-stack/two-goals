@@ -1,11 +1,5 @@
-import { CompassHome } from "@/components/compass-home";
-import { CompassNext } from "@/components/compass-next";
+import { TodayHome } from "@/components/today-home";
 
 export default function Home() {
-  return (
-    <div className="flex flex-col gap-10">
-      <CompassNext />
-      <CompassHome />
-    </div>
-  );
+  return <TodayHome />;
 }

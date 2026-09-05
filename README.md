@@ -1,13 +1,21 @@
 # Two Goals
 
-A personal compass for two aims:
+Two Goals is a local-first personal compass for two aims, held in this order:
 
-1. **To live eternally with Jesus Christ**
-2. **To live financially independent**
+1. **Live eternally with Jesus Christ**
+2. **Live financially independent**
 
-The first is a gift, not a score. Eternal life is knowing the Father and the Son He sent. The Walk pages help you abide — Word, prayer, the gathered church, and love of neighbor — without pretending those practices earn heaven.
+The first is a gift, not a score. The second is a stewardship problem that can be measured and acted on.
 
-The second is stewardship on a deadline: independence in the next 6 to 12 months. Steward sizes the nest egg from the life you intend to fund, including giving, then names the new monthly income you still have to create. A smaller life is not the plan. Enter numbers by hand. They stay in your browser.
+## Product flow
+
+Two Goals 2.0 has three primary places:
+
+- **Today** — a focused dashboard showing the state of both goals and the next action for each.
+- **Walk** — today’s Word, prayer, gathered church, love of neighbor, prayer journal, and recent pattern.
+- **Independence** — the financial target, current capital, gap, income needed, Quicken import, income plan, assumptions, and progress snapshots.
+
+The former **Counsel** experience is now the **Plan Assistant**. It is launched from Independence when help is needed turning an income gap into a practical week of work. The legacy **Steward** route redirects to Independence.
 
 ## Run locally
 
@@ -16,12 +24,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:43147](http://localhost:43147).
+Open `http://localhost:43147`.
 
-- **Compass** — both goals, the verse of the day, today’s practices, and one prioritized next action
-- **Walk** — abiding practices and a private prayer journal
-- **Steward** — 6- or 12-month sprint, plain-English income gap, gross-income estimate, scenario comparison, balance-sheet safety fields, trends, Quicken Classic import, a named stream for this week, and the ledger
-- **Counsel** — a 22-question interview that turns your answers into this week’s actions, with honest confidence about what can and cannot be known yet; completed answers can be revised individually without restarting
+Validation commands:
 
 ```bash
 npm run lint
@@ -29,36 +34,47 @@ npm test
 npm run build
 ```
 
-## Your data
+## Data and privacy
 
-Two Goals is local-first. It tries to save your entries in browser local storage. If that is unavailable, it falls back to session storage and then to in-memory state. The footer shows which storage mode is active.
+Two Goals is local-first. It tries browser local storage first, then session storage, then in-memory state. Existing `two-goals:v1` data remains compatible with the 2.0 interface.
 
-Use **Export backup** to download a portable JSON backup containing your practices, prayers, financial entries, ledger history, and Counsel answers. **Restore backup** validates and imports that file. Reset requires two confirmations because it erases all locally stored Two Goals data.
+Use **Export backup** to download a JSON backup containing practices, prayers, financial values, snapshots, and Plan Assistant answers. **Restore backup** validates and imports that file. Reset requires two confirmations.
 
-Backups are not encrypted. Store them somewhere appropriate for the sensitivity of your prayers and financial information.
+Backups are not encrypted. Store them appropriately for the sensitivity of the information.
 
 ## Quicken Classic for Windows
 
-Steward can import **QIF** and **CSV** exports from Quicken Classic for Windows. The file is parsed locally in the browser; Two Goals does not upload the raw Quicken export. Before anything changes, the importer shows a review screen where each detected value can be edited, unchecked, or approved.
+Independence can import **QIF** and **CSV** exports from Quicken Classic for Windows. Files are parsed in the browser and are not uploaded by Two Goals.
 
-When transaction history is present, Two Goals uses up to the three most recent months in the file to suggest average monthly income, living expenses, and giving. Transfers are ignored. Giving is detected from category names such as giving, tithe, charity, donation, offering, and ministry. Because category conventions vary, these are suggestions and should be reviewed before applying.
+The review screen can suggest:
 
-When recognizable account balances are present, the importer can also suggest invested assets, cash, and debt. Applying imported monthly income intentionally replaces the existing Steward income-source list with a single **Quicken average** source so the same income is not counted twice.
+- invested assets
+- cash
+- debt
+- average monthly income
+- average monthly living expenses
+- average monthly giving
 
-QXF files are not supported yet. Export QIF or CSV from Quicken Classic instead.
+Every suggested value can be edited, unchecked, or approved before it changes Two Goals. QXF is not currently supported.
 
-## How independence is calculated
+## Independence model
 
-FI number = (annual living expenses + annual giving) ÷ safe withdrawal rate.
+Independence target:
 
-Years remaining assume monthly savings keep going and invested assets earn the real return you set. Default return is 5% after inflation; default withdrawal is 4%.
+`(annual living expenses + annual giving) / withdrawal rate`
 
-The FI sprint continues to use the invested-assets ledger as its capital base so historical rows remain comparable. Steward now also tracks cash, an emergency reserve, and debt as a separate balance-sheet safety check rather than silently folding those balances into the historical FI series.
+Capital counted toward the target:
 
-The 6- and 12-month sprint asks what new **take-home** income would actually hit that FI number inside the window. An optional estimated tax rate translates that take-home gap into an approximate gross-income target. Conservative, expected, and optimistic real-return scenarios show how sensitive the deadline is to the return assumption.
+`invested assets + cash above emergency reserve - debt`
 
-The ledger records what already exists. Steward leads with what you will create. Name the stream, write this week’s ask, and when the first dollar arrives, put it on the ledger. Giving stays in the target. The page does not earn the money. You make the ask.
+The result is never allowed below zero.
 
-Counsel interviews you before you invent a product. It is confident about the questions. It is only as confident about this week as your names, hours, and offer. It will not claim the 6–12 month date is honest if your hours × a rate you could get this month cannot cover the gap.
+The 6- or 12-month plan then calculates the monthly savings required to hit the target, compares that with the current monthly surplus, and reports the additional take-home income needed. The estimated tax rate translates that take-home gap into an approximate gross-income target.
 
-This is a planning sketch, not financial, tax, legal, or investment advice. Scripture quotations are from the World English Bible (public domain).
+Defaults are a 5% real return and 4% withdrawal rate. These assumptions can be changed under Advanced assumptions.
+
+## Architecture
+
+Two Goals 2.0 uses React state as the single source of truth. The previous global DOM controller (`record-ledger.js`) has been removed from the live application so UI state and financial calculations cannot be independently repainted by two systems.
+
+This is a planning tool, not financial, tax, legal, or investment advice. Scripture quotations are from the World English Bible (public domain).
