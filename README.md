@@ -9,13 +9,11 @@ The first is a gift, not a score. The second is a stewardship problem that can b
 
 ## Product flow
 
-Two Goals 2.0 has three primary places:
-
-- **Today** — a focused dashboard showing the state of both goals and the next action for each.
+- **Today** — focused state of both goals, next actions, and AI Guide.
 - **Walk** — today’s Word, prayer, gathered church, love of neighbor, prayer journal, and recent pattern.
-- **Independence** — the financial target, current capital, gap, income needed, Quicken import, income plan, assumptions, and progress snapshots.
+- **Independence** — target, current capital, gap, income needed, Quicken import/audit, AI Guide, income plan, assumptions, and snapshots.
 
-The former **Counsel** experience is now the **Plan Assistant**. It is launched from Independence when help is needed turning an income gap into a practical week of work. The legacy **Steward** route redirects to Independence.
+The former **Counsel** experience is the **Plan Assistant**, launched from Independence when help is needed turning an income gap into a practical week of work. The legacy **Steward** route redirects to Independence.
 
 ## Run locally
 
@@ -26,7 +24,7 @@ npm run dev
 
 Open `http://localhost:43147`.
 
-Validation commands:
+Validation:
 
 ```bash
 npm run lint
@@ -36,26 +34,40 @@ npm run build
 
 ## Data and privacy
 
-Two Goals is local-first. It tries browser local storage first, then session storage, then in-memory state. Existing `two-goals:v1` data remains compatible with the 2.0 interface.
+Two Goals is local-first. It tries browser local storage first, then session storage, then in-memory state. Existing `two-goals:v1` data remains compatible.
 
-Use **Export backup** to download a JSON backup containing practices, prayers, financial values, snapshots, and Plan Assistant answers. **Restore backup** validates and imports that file. Reset requires two confirmations.
+Use **Export backup** to download a JSON backup containing practices, prayers, financial values, snapshots, and Plan Assistant answers. Backups are not encrypted.
 
-Backups are not encrypted. Store them appropriately for the sensitivity of the information.
+## Quicken Classic audit
 
-## Quicken Classic for Windows
+Independence imports **QIF** and **CSV** exports from Quicken Classic for Windows. The raw file is parsed in the browser and is not uploaded.
 
-Independence can import **QIF** and **CSV** exports from Quicken Classic for Windows. Files are parsed in the browser and are not uploaded by Two Goals.
+Before applying an import, Two Goals now exposes the evidence behind every headline value:
 
-The review screen can suggest:
+- every detected account, balance, classification, confidence, and reason
+- every parsed transaction, classification, inclusion/exclusion decision, and confidence
+- the exact months used for averages
+- per-month income, living, giving, transfers, and row counts
+- transaction/account classification coverage and items needing review
+- warnings and unrecognized account types
 
-- invested assets
-- cash
-- debt
-- average monthly income
-- average monthly living expenses
-- average monthly giving
+Every suggested value can still be edited, unchecked, or approved before it changes Two Goals. QXF is not currently supported.
 
-Every suggested value can be edited, unchecked, or approved before it changes Two Goals. QXF is not currently supported.
+The optional **Ask Guide to audit** action sends only structured audit information. Transaction details are excluded unless the user explicitly checks the option to include up to 75 rows. The raw Quicken file is never sent to Guide.
+
+## AI Guide
+
+Guide is available on Today and Independence. It can explain calculations, challenge assumptions, identify the most important next action, and review a Quicken audit.
+
+Guide calls OpenAI from a server-only Next.js route. No API key is exposed to browser code. Configure production/local environments with:
+
+```bash
+OPENAI_API_KEY=...
+# optional; defaults to gpt-5-mini
+OPENAI_MODEL=gpt-5-mini
+```
+
+Guide sends structured financial state, recent snapshots, and today’s practice completion. Prayer-journal text is never sent. Plan Assistant answers are excluded by default and can be included explicitly by the user.
 
 ## Independence model
 
@@ -67,14 +79,12 @@ Capital counted toward the target:
 
 `invested assets + cash above emergency reserve - debt`
 
-The result is never allowed below zero.
+The 6- or 12-month plan compares required monthly saving with the current surplus and reports the additional take-home income needed. The estimated tax rate translates that gap into approximate gross income.
 
-The 6- or 12-month plan then calculates the monthly savings required to hit the target, compares that with the current monthly surplus, and reports the additional take-home income needed. The estimated tax rate translates that take-home gap into an approximate gross-income target.
-
-Defaults are a 5% real return and 4% withdrawal rate. These assumptions can be changed under Advanced assumptions.
+Defaults are a 5% real return and 4% withdrawal rate.
 
 ## Architecture
 
-Two Goals 2.0 uses React state as the single source of truth. The previous global DOM controller (`record-ledger.js`) has been removed from the live application so UI state and financial calculations cannot be independently repainted by two systems.
+React state is the single source of truth. The former global DOM controller (`record-ledger.js`) is gone. Quicken parsing is client-side; AI calls are server-side.
 
 This is a planning tool, not financial, tax, legal, or investment advice. Scripture quotations are from the World English Bible (public domain).

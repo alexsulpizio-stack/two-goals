@@ -82,6 +82,17 @@ assert.equal(qifPreview.monthlyIncome, 3000);
 assert.equal(qifPreview.monthlyExpenses, 1000);
 assert.equal(qifPreview.monthlyGiving, 300);
 assert.deepEqual(qifPreview.monthsUsed, ["2026-06", "2026-07", "2026-08"]);
+assert.equal(qifPreview.accountAudit[0]?.classification, "cash");
+assert.equal(qifPreview.accountAudit[1]?.classification, "invested");
+assert.equal(qifPreview.accountAudit[2]?.classification, "debt");
+assert.equal(qifPreview.transactionAudit.filter((item) => item.classification === "transfer").length, 1);
+assert.equal(qifPreview.transactionAudit.find((item) => item.payee === "Church")?.classification, "giving");
+assert.equal(qifPreview.monthlyAudit.length, 3);
+assert.equal(qifPreview.monthlyAudit[0]?.income, 3000);
+assert.equal(qifPreview.monthlyAudit[0]?.living, 1000);
+assert.equal(qifPreview.monthlyAudit[0]?.giving, 300);
+assert.equal(qifPreview.coverage.reviewAccounts, 0);
+assert.ok(qifPreview.coverage.transactionCoverage > 0.9);
 
 const csv = `Date,Account,Account Type,Payee,Category,Amount,Balance\n8/1/26,Checking,Bank,Employer,Salary,3000,12000\n8/2/26,Checking,Bank,Store,Household,-900,12000\n8/3/26,Checking,Bank,Church,Donation,-200,12000\n`;
 const parsedCsv = parseCsv(csv);
@@ -93,10 +104,15 @@ assert.equal(csvPreview.cash, 12000);
 assert.equal(csvPreview.monthlyIncome, 3000);
 assert.equal(csvPreview.monthlyExpenses, 900);
 assert.equal(csvPreview.monthlyGiving, 200);
+assert.equal(csvPreview.accountAudit[0]?.classification, "cash");
+assert.equal(csvPreview.transactionAudit[2]?.classification, "giving");
 
-assert.throws(
-  () => previewQuickenImport("archive.qxf", "anything"),
-  /QXF is not supported yet/
-);
+const uncertainCsv = `Date,Account,Account Type,Payee,Category,Amount,Balance\n8/1/26,Mystery,,Deposit,,500,1000\n`;
+const uncertain = previewQuickenImport("uncertain.csv", uncertainCsv);
+assert.equal(uncertain.accountAudit[0]?.classification, "review");
+assert.equal(uncertain.coverage.reviewAccounts, 1);
+assert.equal(uncertain.transactionAudit[0]?.confidence, "low");
+
+assert.throws(() => previewQuickenImport("archive.qxf", "anything"), /QXF is not supported yet/);
 
 console.log("quicken tests passed");
