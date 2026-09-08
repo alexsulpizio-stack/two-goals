@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { resolveGuideTransport } from "@/lib/guide-config";
+import {
+  readVercelOidcTokenFromRequestContext,
+  resolveGuideTransport,
+} from "@/lib/guide-config";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 type GuideRequest = {
   question?: string;
@@ -15,6 +20,15 @@ type ErrorPayload = {
     message?: unknown;
   };
 };
+
+type RateBucket = {
+  count: number;
+  resetAt: number;
+};
+
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 12;
+const RATE_LIMIT_SYMBOL = Symbol.for("two-goals.guide-rate-limit");
 
 function extractText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
@@ -62,13 +76,133 @@ async function parseResponse(response: Response): Promise<unknown> {
   }
 }
 
+function guideTransport() {
+  return resolveGuideTransport(
+    process.env,
+    readVercelOidcTokenFromRequestContext()
+  );
+}
+
+function isAllowedOrigin(request: Request): boolean {
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite === "cross-site") return false;
+
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+
+  const expectedHost =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (!expectedHost) return true;
+
+  try {
+    return new URL(origin).host === expectedHost;
+  } catch {
+    return false;
+  }
+}
+
+function rateLimitStore(): Map<string, RateBucket> {
+  const contextGlobal = globalThis as typeof globalThis &
+    Record<symbol, Map<string, RateBucket> | undefined>;
+
+  let store = contextGlobal[RATE_LIMIT_SYMBOL];
+  if (!store) {
+    store = new Map<string, RateBucket>();
+    contextGlobal[RATE_LIMIT_SYMBOL] = store;
+  }
+
+  return store;
+}
+
+function rateLimit(request: Request): { allowed: boolean; retryAfter: number } {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  const clientKey =
+    forwardedFor?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown";
+  const now = Date.now();
+  const store = rateLimitStore();
+  const current = store.get(clientKey);
+
+  if (!current || current.resetAt <= now) {
+    store.set(clientKey, {
+      count: 1,
+      resetAt: now + RATE_LIMIT_WINDOW_MS,
+    });
+    return { allowed: true, retryAfter: 0 };
+  }
+
+  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return {
+      allowed: false,
+      retryAfter: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
+    };
+  }
+
+  current.count += 1;
+  return { allowed: true, retryAfter: 0 };
+}
+
+export async function GET() {
+  const transport = guideTransport();
+
+  return NextResponse.json(
+    transport
+      ? {
+          status: "ready",
+          provider: transport.kind,
+          model: transport.model,
+          credentialSource: transport.credentialSource,
+        }
+      : {
+          status: "not_configured",
+          provider: null,
+          model: null,
+          credentialSource: null,
+        },
+    {
+      status: transport ? 200 : 503,
+      headers: { "Cache-Control": "no-store" },
+    }
+  );
+}
+
 export async function POST(request: Request) {
-  const transport = resolveGuideTransport(process.env);
+  if (!isAllowedOrigin(request)) {
+    return NextResponse.json(
+      { error: "Guide only accepts requests from Two Goals.", code: "forbidden_origin" },
+      { status: 403 }
+    );
+  }
+
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > 100_000) {
+    return NextResponse.json(
+      { error: "Guide context is too large.", code: "request_too_large" },
+      { status: 413 }
+    );
+  }
+
+  const limit = rateLimit(request);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      {
+        error: "Guide has received several requests. Try again in a few minutes.",
+        code: "rate_limited",
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limit.retryAfter) },
+      }
+    );
+  }
+
+  const transport = guideTransport();
   if (!transport) {
     return NextResponse.json(
       {
         error:
-          "Guide is installed, but no server-side AI credential is available. Vercel deployments can use their automatic OIDC credential; local development can use AI_GATEWAY_API_KEY or OPENAI_API_KEY.",
+          "Guide could not obtain a server-side AI credential. The Vercel project may need OIDC enabled, or it can use AI_GATEWAY_API_KEY or OPENAI_API_KEY.",
         code: "not_configured",
       },
       { status: 503 }
@@ -147,6 +281,7 @@ export async function POST(request: Request) {
       answer,
       provider: transport.kind,
       model: transport.model,
+      credentialSource: transport.credentialSource,
     });
   } catch {
     return NextResponse.json(
