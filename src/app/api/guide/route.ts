@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { resolveGuideTransport } from "@/lib/guide-config";
+
 export const runtime = "nodejs";
 
 type GuideRequest = {
@@ -8,30 +10,67 @@ type GuideRequest = {
   includeTransactionDetails?: boolean;
 };
 
+type ErrorPayload = {
+  error?: {
+    message?: unknown;
+  };
+};
+
 function extractText(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
+
   const data = payload as { output_text?: unknown; output?: unknown };
-  if (typeof data.output_text === "string" && data.output_text.trim()) return data.output_text.trim();
+  if (typeof data.output_text === "string" && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
   if (!Array.isArray(data.output)) return "";
+
   const chunks: string[] = [];
   for (const item of data.output) {
     if (!item || typeof item !== "object") continue;
+
     const content = (item as { content?: unknown }).content;
     if (!Array.isArray(content)) continue;
+
     for (const part of content) {
       if (!part || typeof part !== "object") continue;
+
       const text = (part as { text?: unknown }).text;
       if (typeof text === "string") chunks.push(text);
     }
   }
+
   return chunks.join("\n").trim();
 }
 
+function extractErrorMessage(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+
+  const message = (payload as ErrorPayload).error?.message;
+  return typeof message === "string" ? message.trim() : "";
+}
+
+async function parseResponse(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { error: { message: text.slice(0, 500) } };
+  }
+}
+
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  const transport = resolveGuideTransport(process.env);
+  if (!transport) {
     return NextResponse.json(
-      { error: "Guide is installed but the server is not configured with OPENAI_API_KEY yet.", code: "not_configured" },
+      {
+        error:
+          "Guide is installed, but no server-side AI credential is available. Vercel deployments can use their automatic OIDC credential; local development can use AI_GATEWAY_API_KEY or OPENAI_API_KEY.",
+        code: "not_configured",
+      },
       { status: 503 }
     );
   }
@@ -44,7 +83,9 @@ export async function POST(request: Request) {
   }
 
   const question = String(body.question ?? "").trim().slice(0, 4000);
-  if (!question) return NextResponse.json({ error: "Ask Guide a question first." }, { status: 400 });
+  if (!question) {
+    return NextResponse.json({ error: "Ask Guide a question first." }, { status: 400 });
+  }
 
   const contextText = JSON.stringify(body.context ?? {}, null, 2).slice(0, 40000);
   const instructions = [
@@ -55,34 +96,62 @@ export async function POST(request: Request) {
     "For finance, distinguish planning guidance from professional financial, tax, legal, or investment advice.",
     "Use only the structured context supplied by the app. Never claim access to the user's raw Quicken file, bank account, or data not included in the request.",
     "When reviewing Quicken classifications, call out uncertainty, suspicious categories, transfers, missing account types, and anything that could materially distort averages.",
-    "End with one clear next action when a next action is appropriate."
+    "End with one clear next action when a next action is appropriate.",
   ].join(" ");
 
+  const requestBody = {
+    model: transport.model,
+    instructions,
+    input: `TWO GOALS CONTEXT\n${contextText}\n\nUSER QUESTION\n${question}`,
+    max_output_tokens: 1200,
+    ...(transport.kind === "vercel-ai-gateway"
+      ? {
+          providerOptions: {
+            gateway: {
+              disallowPromptTraining: true,
+            },
+          },
+        }
+      : {}),
+  };
+
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetch(transport.endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${transport.apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-5-mini",
-        instructions,
-        input: `TWO GOALS CONTEXT\n${contextText}\n\nUSER QUESTION\n${question}`,
-        max_output_tokens: 1200,
-      }),
+      body: JSON.stringify(requestBody),
+      cache: "no-store",
     });
 
-    const payload = await response.json();
+    const payload = await parseResponse(response);
     if (!response.ok) {
-      const message = payload?.error?.message || "Guide could not complete this request.";
-      return NextResponse.json({ error: message }, { status: response.status });
+      const message = extractErrorMessage(payload) || "Guide could not complete this request.";
+      return NextResponse.json(
+        { error: message, code: "provider_error" },
+        { status: response.status }
+      );
     }
 
     const answer = extractText(payload);
-    if (!answer) return NextResponse.json({ error: "Guide returned no text." }, { status: 502 });
-    return NextResponse.json({ answer });
+    if (!answer) {
+      return NextResponse.json(
+        { error: "Guide returned no text.", code: "empty_response" },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({
+      answer,
+      provider: transport.kind,
+      model: transport.model,
+    });
   } catch {
-    return NextResponse.json({ error: "Guide could not reach the AI service." }, { status: 502 });
+    return NextResponse.json(
+      { error: "Guide could not reach the AI service.", code: "service_unavailable" },
+      { status: 502 }
+    );
   }
 }
