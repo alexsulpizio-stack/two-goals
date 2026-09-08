@@ -59,7 +59,7 @@ The optional **Ask Guide to audit** action sends only structured audit informati
 
 Guide is available on Today and Independence. It can explain calculations, challenge assumptions, identify the most important next action, and review a Quicken audit.
 
-Guide runs through a server-only Next.js route, so no AI credential is exposed to browser code. On Vercel, it prefers the deployment’s short-lived `VERCEL_OIDC_TOKEN` and calls Vercel AI Gateway. It can also use a manually supplied AI Gateway key or fall back to the OpenAI API.
+Guide runs through a server-only Next.js route, so no AI credential is exposed to browser code. On Vercel, it resolves the deployment’s short-lived OIDC credential from the active function request context and calls Vercel AI Gateway. It can also use a manually supplied AI Gateway key or fall back to the OpenAI API.
 
 Vercel production normally needs no long-lived AI secret. For local development or an external deployment, use one of these configurations:
 
@@ -76,6 +76,8 @@ OPENAI_API_KEY=...
 # optional; defaults to gpt-5-mini
 OPENAI_MODEL=gpt-5-mini
 ```
+
+`GET /api/guide` reports whether Guide can resolve a credential, provider, and model without revealing the credential itself. Guide POST requests are same-origin checked, size limited, and conservatively rate limited.
 
 When AI Gateway is used, requests explicitly disable prompt training. Guide sends structured financial state, recent snapshots, and today’s practice completion. Prayer-journal text is never sent. Plan Assistant answers are excluded by default and can be included explicitly by the user.
 
