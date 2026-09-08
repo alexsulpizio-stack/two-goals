@@ -1,11 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bot, Send, ShieldCheck } from "lucide-react";
+import { Bot, ExternalLink, Send, ShieldCheck } from "lucide-react";
 
 import { useAppState } from "@/hooks/use-app-state";
-import { independencePlan, sprintPlan } from "@/lib/finance";
 import { todayKey } from "@/lib/dates";
+import { independencePlan, sprintPlan } from "@/lib/finance";
+
+type GuideError = {
+  message: string;
+  code?: string;
+  setupUrl?: string;
+  alternative?: string;
+};
 
 export function GuidePanel({
   title = "Guide",
@@ -26,7 +33,7 @@ export function GuidePanel({
   const { state } = useAppState();
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<GuideError | null>(null);
   const [loading, setLoading] = useState(false);
   const [includePlanAnswers, setIncludePlanAnswers] = useState(false);
 
@@ -34,6 +41,7 @@ export function GuidePanel({
     const plan = independencePlan(state.finance);
     const sprint = sprintPlan(state.finance, state.finance.targetMonths);
     const practice = state.practices[todayKey()];
+
     return {
       finance: {
         inputs: state.finance,
@@ -55,7 +63,9 @@ export function GuidePanel({
         gathered: Boolean(practice?.gathered),
         neighbor: Boolean(practice?.neighbor),
       },
-      planAssistant: includePlanAnswers ? state.interview : { completedAt: state.interview.completedAt },
+      planAssistant: includePlanAnswers
+        ? state.interview
+        : { completedAt: state.interview.completedAt },
       recentSnapshots: state.snapshots.slice(0, 6),
       extraContext: extraContext ?? null,
     };
@@ -64,21 +74,43 @@ export function GuidePanel({
   async function ask(nextQuestion?: string) {
     const prompt = (nextQuestion ?? question).trim();
     if (!prompt || loading) return;
+
     setQuestion(prompt);
     setLoading(true);
-    setError("");
+    setError(null);
     setAnswer("");
+
     try {
       const response = await fetch("/api/guide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: prompt, context }),
       });
-      const data = (await response.json()) as { answer?: string; error?: string; code?: string };
-      if (!response.ok) throw new Error(data.error || "Guide could not answer.");
+
+      const data = (await response.json()) as {
+        answer?: string;
+        error?: string;
+        code?: string;
+        setupUrl?: string;
+        alternative?: string;
+      };
+
+      if (!response.ok) {
+        setError({
+          message: data.error || "Guide could not answer.",
+          code: data.code,
+          setupUrl: data.setupUrl,
+          alternative: data.alternative,
+        });
+        return;
+      }
+
       setAnswer(data.answer || "");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Guide could not answer.");
+      setError({
+        message:
+          caught instanceof Error ? caught.message : "Guide could not answer.",
+      });
     } finally {
       setLoading(false);
     }
@@ -92,9 +124,13 @@ export function GuidePanel({
             <Bot className="size-5" />
           </span>
           <div>
-            <p className="text-xs tracking-[0.18em] text-faith uppercase">AI direction</p>
+            <p className="text-xs tracking-[0.18em] text-faith uppercase">
+              AI direction
+            </p>
             <h2 className="font-heading mt-1 text-2xl">{title}</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {description}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -123,7 +159,8 @@ export function GuidePanel({
             onChange={(event) => setIncludePlanAnswers(event.target.checked)}
             className="mt-0.5 size-4"
           />
-          Include my Plan Assistant answers. Off by default because those answers may be more personal. Prayer-journal text is never sent by this Guide.
+          Include my Plan Assistant answers. Off by default because those answers
+          may be more personal. Prayer-journal text is never sent by this Guide.
         </label>
 
         <div className="flex gap-2">
@@ -151,21 +188,56 @@ export function GuidePanel({
           </button>
         </div>
 
-        {loading ? <p role="status" className="text-sm text-muted-foreground">Guide is thinking…</p> : null}
+        {loading ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Guide is thinking…
+          </p>
+        ) : null}
+
         {error ? (
-          <div role="alert" className="rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm leading-relaxed text-destructive">
-            {error}
+          <div
+            role="alert"
+            className="rounded-xl border border-destructive/25 bg-destructive/5 p-4 text-sm leading-relaxed text-destructive"
+          >
+            <p className="font-medium">{error.message}</p>
+
+            {error.code === "gateway_billing_required" ? (
+              <div className="mt-3 flex flex-col gap-3">
+                {error.setupUrl ? (
+                  <a
+                    href={error.setupUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex w-fit items-center gap-2 rounded-lg bg-faith px-3 py-2 text-xs font-semibold text-white hover:bg-faith/90"
+                  >
+                    Enable Vercel AI Gateway
+                    <ExternalLink className="size-3.5" aria-hidden="true" />
+                  </a>
+                ) : null}
+                {error.alternative ? (
+                  <p className="max-w-3xl text-xs text-foreground/75">
+                    {error.alternative}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
+
         {answer ? (
           <div className="rounded-2xl border border-border/80 bg-background p-4 sm:p-5">
-            <p className="text-xs tracking-[0.16em] text-faith uppercase">Guide</p>
-            <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-foreground">{answer}</div>
+            <p className="text-xs tracking-[0.16em] text-faith uppercase">
+              Guide
+            </p>
+            <div className="mt-2 whitespace-pre-wrap text-sm leading-7 text-foreground">
+              {answer}
+            </div>
           </div>
         ) : null}
 
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Guide is for planning and explanation, not professional financial, tax, legal, or investment advice. AI can be wrong; verify material decisions.
+          Guide is for planning and explanation, not professional financial, tax,
+          legal, or investment advice. AI can be wrong; verify material decisions.
         </p>
       </div>
     </section>

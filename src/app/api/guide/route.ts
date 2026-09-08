@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 
 import {
+  isGatewayBillingError,
   readVercelOidcTokenFromRequestContext,
   resolveGuideTransport,
+  VERCEL_AI_BILLING_URL,
 } from "@/lib/guide-config";
 
 export const runtime = "nodejs";
@@ -153,6 +155,10 @@ export async function GET() {
           provider: transport.kind,
           model: transport.model,
           credentialSource: transport.credentialSource,
+          note:
+            transport.kind === "vercel-ai-gateway"
+              ? "Credential available. AI Gateway billing is verified only when a request is submitted."
+              : "Direct OpenAI credential available.",
         }
       : {
           status: "not_configured",
@@ -202,7 +208,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Guide could not obtain a server-side AI credential. The Vercel project may need OIDC enabled, or it can use AI_GATEWAY_API_KEY or OPENAI_API_KEY.",
+          "Guide has no usable server-side AI provider. Configure OPENAI_API_KEY, AI_GATEWAY_API_KEY, or Vercel AI Gateway.",
         code: "not_configured",
       },
       { status: 503 }
@@ -263,6 +269,24 @@ export async function POST(request: Request) {
     const payload = await parseResponse(response);
     if (!response.ok) {
       const message = extractErrorMessage(payload) || "Guide could not complete this request.";
+
+      if (
+        transport.kind === "vercel-ai-gateway" &&
+        isGatewayBillingError(message)
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Guide reached Vercel AI Gateway, but AI Gateway billing is not enabled for this workspace.",
+            code: "gateway_billing_required",
+            setupUrl: VERCEL_AI_BILLING_URL,
+            alternative:
+              "Alternatively, add a funded OPENAI_API_KEY to the Vercel project. Two Goals will then use OpenAI directly instead of the Gateway.",
+          },
+          { status: 402 }
+        );
+      }
+
       return NextResponse.json(
         { error: message, code: "provider_error" },
         { status: response.status }

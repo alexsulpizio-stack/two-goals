@@ -59,25 +59,31 @@ The optional **Ask Guide to audit** action sends only structured audit informati
 
 Guide is available on Today and Independence. It can explain calculations, challenge assumptions, identify the most important next action, and review a Quicken audit.
 
-Guide runs through a server-only Next.js route, so no AI credential is exposed to browser code. On Vercel, it resolves the deployment’s short-lived OIDC credential from the active function request context and calls Vercel AI Gateway. It can also use a manually supplied AI Gateway key or fall back to the OpenAI API.
+Guide runs through a server-only Next.js route, so no AI credential is exposed to browser code. It supports three provider paths, in this order:
 
-Vercel production normally needs no long-lived AI secret. For local development or an external deployment, use one of these configurations:
+1. `AI_GATEWAY_API_KEY` — explicitly configured Vercel AI Gateway access
+2. `OPENAI_API_KEY` — direct OpenAI access; this deliberately overrides automatic Vercel OIDC
+3. Vercel’s short-lived request-scoped OIDC credential — automatic AI Gateway authentication
+
+Vercel OIDC removes the need to store a long-lived Gateway credential, but it does **not** remove AI Gateway billing requirements. The Vercel workspace must have AI Gateway billing enabled, including a valid payment method when Vercel requires one.
+
+For local development or to select a provider explicitly, use one of these configurations:
 
 ```bash
-# Preferred local option: Vercel AI Gateway
+# Vercel AI Gateway
 AI_GATEWAY_API_KEY=...
 # optional; provider/model format, defaults to openai/gpt-5-mini
 AI_GATEWAY_MODEL=openai/gpt-5-mini
 ```
 
 ```bash
-# Direct OpenAI fallback
+# Direct OpenAI; also bypasses automatic Vercel AI Gateway routing
 OPENAI_API_KEY=...
 # optional; defaults to gpt-5-mini
 OPENAI_MODEL=gpt-5-mini
 ```
 
-`GET /api/guide` reports whether Guide can resolve a credential, provider, and model without revealing the credential itself. Guide POST requests are same-origin checked, size limited, and conservatively rate limited.
+`GET /api/guide` reports whether Guide can resolve a credential, provider, and model without revealing the credential itself. Guide POST requests are same-origin checked, size limited, and conservatively rate limited. Gateway billing failures are translated into an actionable setup message in the interface.
 
 When AI Gateway is used, requests explicitly disable prompt training. Guide sends structured financial state, recent snapshots, and today’s practice completion. Prayer-journal text is never sent. Plan Assistant answers are excluded by default and can be included explicitly by the user.
 
