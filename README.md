@@ -42,7 +42,7 @@ Use **Export backup** to download a JSON backup containing practices, prayers, f
 
 Independence imports **QIF** and **CSV** exports from Quicken Classic for Windows. The raw file is parsed in the browser and is not uploaded.
 
-Before applying an import, Two Goals now exposes the evidence behind every headline value:
+Before applying an import, Two Goals exposes the evidence behind every headline value:
 
 - every detected account, balance, classification, confidence, and reason
 - every parsed transaction, classification, inclusion/exclusion decision, and confidence
@@ -59,15 +59,25 @@ The optional **Ask Guide to audit** action sends only structured audit informati
 
 Guide is available on Today and Independence. It can explain calculations, challenge assumptions, identify the most important next action, and review a Quicken audit.
 
-Guide calls OpenAI from a server-only Next.js route. No API key is exposed to browser code. Configure production/local environments with:
+Guide runs through a server-only Next.js route, so no AI credential is exposed to browser code. On Vercel, it prefers the deployment’s short-lived `VERCEL_OIDC_TOKEN` and calls Vercel AI Gateway. It can also use a manually supplied AI Gateway key or fall back to the OpenAI API.
+
+Vercel production normally needs no long-lived AI secret. For local development or an external deployment, use one of these configurations:
 
 ```bash
+# Preferred local option: Vercel AI Gateway
+AI_GATEWAY_API_KEY=...
+# optional; provider/model format, defaults to openai/gpt-5-mini
+AI_GATEWAY_MODEL=openai/gpt-5-mini
+```
+
+```bash
+# Direct OpenAI fallback
 OPENAI_API_KEY=...
 # optional; defaults to gpt-5-mini
 OPENAI_MODEL=gpt-5-mini
 ```
 
-Guide sends structured financial state, recent snapshots, and today’s practice completion. Prayer-journal text is never sent. Plan Assistant answers are excluded by default and can be included explicitly by the user.
+When AI Gateway is used, requests explicitly disable prompt training. Guide sends structured financial state, recent snapshots, and today’s practice completion. Prayer-journal text is never sent. Plan Assistant answers are excluded by default and can be included explicitly by the user.
 
 ## Independence model
 
