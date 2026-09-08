@@ -17,6 +17,11 @@ function normalizeGatewayModel(value: string | undefined): string {
   return model.includes("/") ? model : `openai/${model}`;
 }
 
+function normalizeOpenAIModel(value: string | undefined): string {
+  const model = clean(value) || DEFAULT_OPENAI_MODEL;
+  return model.startsWith("openai/") ? model.slice("openai/".length) : model;
+}
+
 export function resolveGuideTransport(
   env: Record<string, string | undefined>
 ): GuideTransport | null {
@@ -38,6 +43,6 @@ export function resolveGuideTransport(
     kind: "openai",
     endpoint: "https://api.openai.com/v1/responses",
     apiKey: openaiKey,
-    model: clean(env.OPENAI_MODEL) || DEFAULT_OPENAI_MODEL,
+    model: normalizeOpenAIModel(env.OPENAI_MODEL),
   };
 }
