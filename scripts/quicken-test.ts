@@ -161,6 +161,18 @@ assert.equal(uncertain.accountAudit[0]?.classification, "review");
 assert.equal(uncertain.coverage.reviewAccounts, 1);
 assert.equal(uncertain.transactionAudit[0]?.confidence, "low");
 
+const nonRoutineCsv = `Date,Account,Account Type,Payee,Category,Amount,Balance\n8/1/26,Checking,Bank,Employer,Salary,5000,12000\n8/2/26,Checking,Bank,AmEx,Credit Card Payment,-1500,12000\n8/3/26,Brokerage,Investment,Broker,Stock Sale,8000,50000\n8/4/26,Checking,Bank,Bank,HELOC Draw,10000,12000\n8/5/26,Checking,Bank,Employer,Expense Reimbursement,700,12000\n8/6/26,Checking,Bank,Grocer,Household,-1000,12000\n`;
+const nonRoutine = previewQuickenImport("non-routine.csv", nonRoutineCsv, new Date(2026, 8, 8));
+assert.equal(nonRoutine.monthlyIncome, 5000);
+assert.equal(nonRoutine.monthlyExpenses, 1000);
+assert.equal(nonRoutine.baselineTransactions, 2);
+assert.equal(nonRoutine.transactionAudit.filter((item) => item.classification === "review").length, 4);
+assert.equal(nonRoutine.transactionAudit.find((item) => item.category === "Credit Card Payment")?.includedInAverage, false);
+assert.equal(nonRoutine.transactionAudit.find((item) => item.category === "Stock Sale")?.includedInAverage, false);
+assert.equal(nonRoutine.transactionAudit.find((item) => item.category === "HELOC Draw")?.includedInAverage, false);
+assert.equal(nonRoutine.transactionAudit.find((item) => item.category === "Expense Reimbursement")?.includedInAverage, false);
+assert.match(nonRoutine.warnings.join(" "), /excluded from the baseline/);
+
 const currentMonthQif = `!Type:Bank
 D6/01/26
 T1000
