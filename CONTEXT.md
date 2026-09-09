@@ -20,18 +20,27 @@ The app is mid-overhaul, not in maintenance. Al dislikes the existing flow — i
 
 ---
 
+## Security status
+
+- **Guide access protection landed.** Production Guide requests now require a private session established with `GUIDE_ACCESS_PASSWORD` (minimum 12 characters). The session uses an HttpOnly, Secure, SameSite=Strict cookie and lasts 30 days.
+- **Production fails closed.** If `GUIDE_ACCESS_PASSWORD` is missing or too short, Guide does not make AI requests.
+- **Unlock attempts and Guide requests are rate limited.** These are process-local safeguards, so the password still needs to be long and unique.
+- **AI credentials remain server-side.** The browser calls `/api/guide`; it does not receive the OpenAI or Gateway credential.
+- **Deployment action required:** add `GUIDE_ACCESS_PASSWORD` to the Vercel project environment before expecting Guide to unlock in production.
+
+---
+
 ## Check these first
 
-- **Is the Vercel deployment authenticated?** It's a public URL holding imported financial data.
+- **Set and verify `GUIDE_ACCESS_PASSWORD` in Vercel.** Then confirm the production unlock flow works and an unauthenticated `/api/guide` request returns 401.
 - **Spending cap on the OpenAI key**, given auto-merge and auto-deploy are both on.
-- **Repo HEAD vs. production** — confirm they're in sync and establish what the prior audit already landed.
+- **Repo HEAD vs. production** — confirm they're in sync after the security deployment.
 
 ---
 
 ## Open work
 
 - **AI architecture undecided.** Vercel AI Gateway refused requests without a card on file; a direct OpenAI credential is now working (`provider: openai`, `model: gpt-5.6-luna`, `credentialSource: openai-key`). Unclear whether direct access is the permanent choice or a workaround. Don't fix the Gateway path without settling that.
-- **Secrets** — verify keys are server-side and not reachable from the client.
 - **"Window is not being updated with input values"** — reported earlier, resolution unknown. Retest.
 - **End-to-end validation** never confirmed: inputs, goal calculations, persistence, import, import inspection, assistant, production behavior.
 
