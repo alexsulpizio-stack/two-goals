@@ -257,7 +257,7 @@ function MoneyField({ id, label, hint, value, onSave }: { id: string; label: str
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor={id}>{label}</Label>
-      <div className="relative"><span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span><Input id={id} inputMode="decimal" className="pl-7" defaultValue={value || ""} placeholder="0" onBlur={(event) => onSave(numeric(event.target.value))} /></div>
+      <div className="relative"><span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span><Input id={id} inputMode="decimal" className="pl-7" defaultValue={value || ""} placeholder="0" onChange={(event) => onSave(numeric(event.target.value))} /></div>
       <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
     </div>
   );
@@ -265,5 +265,5 @@ function MoneyField({ id, label, hint, value, onSave }: { id: string; label: str
 
 function PercentField({ label, value, onSave }: { label: string; value: number; onSave: (value: number) => void }) {
   const id = `advanced-${label.toLowerCase().replace(/[^a-z]+/g, "-")}`;
-  return <div className="flex flex-col gap-2"><Label htmlFor={id}>{label}</Label><div className="relative"><Input id={id} inputMode="decimal" defaultValue={value} className="pr-8" onBlur={(event) => onSave(Math.min(95, numeric(event.target.value)))} /><span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span></div></div>;
+  return <div className="flex flex-col gap-2"><Label htmlFor={id}>{label}</Label><div className="relative"><Input id={id} inputMode="decimal" defaultValue={value} className="pr-8" onChange={(event) => onSave(Math.min(95, numeric(event.target.value)))} /><span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span></div></div>;
 }
