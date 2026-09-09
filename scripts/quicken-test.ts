@@ -94,6 +94,19 @@ assert.equal(qifPreview.monthlyAudit[0]?.giving, 300);
 assert.equal(qifPreview.coverage.reviewAccounts, 0);
 assert.ok(qifPreview.coverage.transactionCoverage > 0.9);
 
+const creditCardWithCashInName = `!Account
+NAmEx Blue Cash Preferred
+TCCard
+$-1250
+^
+`;
+const creditCardPreview = previewQuickenImport("blue-cash.qif", creditCardWithCashInName);
+assert.equal(creditCardPreview.accountAudit[0]?.classification, "debt");
+assert.equal(creditCardPreview.accountAudit[0]?.confidence, "high");
+assert.equal(creditCardPreview.debt, 1250);
+assert.equal(creditCardPreview.cash, null);
+assert.match(creditCardPreview.accountAudit[0]?.reason ?? "", /Quicken liability account type/);
+
 const csv = `Date,Account,Account Type,Payee,Category,Amount,Balance\n8/1/26,Checking,Bank,Employer,Salary,3000,12000\n8/2/26,Checking,Bank,Store,Household,-900,12000\n8/3/26,Checking,Bank,Church,Donation,-200,12000\n`;
 const parsedCsv = parseCsv(csv);
 assert.equal(parsedCsv.transactions.length, 3);
