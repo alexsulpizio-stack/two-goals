@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
 import { QuickenImport } from "@/components/quicken-import";
@@ -28,6 +28,10 @@ const moneyFields: Array<{ key: keyof Pick<FinanceInputs, "netWorth" | "cash" | 
 function numeric(raw: string) {
   const value = Number(raw.replace(/[$,]/g, ""));
   return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function formatWholeMoneyInput(value: number) {
+  return value > 0 ? Math.round(value).toLocaleString("en-US") : "";
 }
 
 export function IndependenceView() {
@@ -254,10 +258,29 @@ function SummaryCard({ label, value, note }: { label: string; value: string; not
 }
 
 function MoneyField({ id, label, hint, value, onSave }: { id: string; label: string; hint: string; value: number; onSave: (value: number) => void }) {
+  const [displayValue, setDisplayValue] = useState(() => formatWholeMoneyInput(value));
+
+  useEffect(() => {
+    setDisplayValue(formatWholeMoneyInput(value));
+  }, [value]);
+
+  function handleChange(raw: string) {
+    const digitsOnly = raw.replace(/[^0-9]/g, "");
+    if (!digitsOnly) {
+      setDisplayValue("");
+      onSave(0);
+      return;
+    }
+
+    const nextValue = Math.round(Number(digitsOnly));
+    setDisplayValue(nextValue.toLocaleString("en-US"));
+    onSave(nextValue);
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor={id}>{label}</Label>
-      <div className="relative"><span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span><Input id={id} inputMode="decimal" className="pl-7" defaultValue={value || ""} placeholder="0" onChange={(event) => onSave(numeric(event.target.value))} /></div>
+      <div className="relative"><span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span><Input id={id} inputMode="numeric" className="pl-7" value={displayValue} placeholder="0" onChange={(event) => handleChange(event.target.value)} /></div>
       <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>
     </div>
   );
