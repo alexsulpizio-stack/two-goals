@@ -124,7 +124,8 @@ export function formatMoney(amount: number): string {
   const formatted = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: absolute >= 1000 ? 0 : 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(absolute);
   return amount < 0 ? `−${formatted}` : formatted;
 }
