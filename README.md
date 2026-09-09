@@ -65,6 +65,20 @@ Guide runs through a server-only Next.js route, so no AI credential is exposed t
 2. `OPENAI_API_KEY` — direct OpenAI access; this deliberately overrides automatic Vercel OIDC
 3. Vercel’s short-lived request-scoped OIDC credential — automatic AI Gateway authentication
 
+### Private Guide access
+
+Production Guide requests require a private access session. Configure this server-side environment variable before using Guide in production:
+
+```bash
+GUIDE_ACCESS_PASSWORD=choose-a-long-private-password
+```
+
+The password must be at least 12 characters. The browser exchanges it for an HttpOnly, Secure, SameSite=Strict session cookie that lasts 30 days. The password is not stored in browser state or local storage.
+
+Production **fails closed**: if `GUIDE_ACCESS_PASSWORD` is missing or too short, Guide will not make AI requests. Local development remains unlocked unless a Guide password is explicitly configured.
+
+Guide unlock attempts and Guide requests are both conservatively rate limited. The rate limits are process-local safeguards rather than a distributed abuse-control system, so the access password should still be long and unique.
+
 Vercel OIDC removes the need to store a long-lived Gateway credential, but it does **not** remove AI Gateway billing requirements. The Vercel workspace must have AI Gateway billing enabled, including a valid payment method when Vercel requires one.
 
 For local development or to select a provider explicitly, use one of these configurations:
@@ -83,7 +97,7 @@ OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5-mini
 ```
 
-`GET /api/guide` reports whether Guide can resolve a credential, provider, and model without revealing the credential itself. Guide POST requests are same-origin checked, size limited, and conservatively rate limited. Gateway billing failures are translated into an actionable setup message in the interface.
+`GET /api/guide` reports whether Guide can resolve a credential, provider, and model only after the private Guide session is authorized. Guide POST requests are same-origin checked, authenticated, size limited, and rate limited. Gateway billing failures are translated into an actionable setup message in the interface.
 
 When AI Gateway is used, requests explicitly disable prompt training. Guide sends structured financial state, recent snapshots, and today’s practice completion. Prayer-journal text is never sent. Plan Assistant answers are excluded by default and can be included explicitly by the user.
 
