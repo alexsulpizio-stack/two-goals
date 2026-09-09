@@ -99,16 +99,30 @@ function isGiving(category: string): boolean {
 }
 
 function classifyAccount(account: QuickenAccount): AccountAudit {
-  const type = account.type.toLowerCase();
+  const type = account.type.trim().toLowerCase();
   const name = account.name.toLowerCase();
-  if (type.includes("invst") || type.includes("investment") || /\b(401k|403b|ira|roth|brokerage|investment|securities)\b/.test(name)) {
-    return { ...account, classification: "invested", confidence: type ? "high" : "medium", included: account.balance !== null, reason: "Investment account type or name matched." };
+  const included = account.balance !== null;
+
+  if (type) {
+    if (type.includes("invst") || type.includes("investment")) {
+      return { ...account, classification: "invested", confidence: "high", included, reason: "Quicken investment account type matched." };
+    }
+    if (type.includes("ccard") || type.includes("credit") || type.includes("oth l") || type.includes("liability")) {
+      return { ...account, classification: "debt", confidence: "high", included, reason: "Quicken liability account type matched." };
+    }
+    if (type.includes("bank") || type.includes("cash")) {
+      return { ...account, classification: "cash", confidence: "high", included, reason: "Quicken cash/bank account type matched." };
+    }
   }
-  if (type.includes("bank") || type.includes("cash") || /\b(checking|savings|cash|money market)\b/.test(name)) {
-    return { ...account, classification: "cash", confidence: type ? "high" : "medium", included: account.balance !== null, reason: "Cash/bank account type or name matched." };
+
+  if (/\b(401k|403b|ira|roth|brokerage|investment|securities)\b/.test(name)) {
+    return { ...account, classification: "invested", confidence: "medium", included, reason: "Account name suggests an investment account; Quicken type was not recognized." };
   }
-  if (type.includes("ccard") || type.includes("credit") || type.includes("oth l") || type.includes("liability") || /\b(mortgage|loan|credit card|line of credit|heloc|debt)\b/.test(name)) {
-    return { ...account, classification: "debt", confidence: type ? "high" : "medium", included: account.balance !== null, reason: "Liability account type or name matched." };
+  if (/\b(mortgage|loan|credit card|line of credit|heloc|debt)\b/.test(name)) {
+    return { ...account, classification: "debt", confidence: "medium", included, reason: "Account name suggests a liability; Quicken type was not recognized." };
+  }
+  if (/\b(checking|savings|cash|money market)\b/.test(name)) {
+    return { ...account, classification: "cash", confidence: "medium", included, reason: "Account name suggests cash/banking; Quicken type was not recognized." };
   }
   return { ...account, classification: "review", confidence: "low", included: false, reason: "Account type/name was not recognized confidently." };
 }
