@@ -68,24 +68,14 @@ T-300
 PChurch
 LChurch Offering
 ^
-D9/01/26
-T99999
-PPartial month income
-LSalary
-^
-D9/02/26
-T-88888
-PPartial month spending
-LHousehold
-^
 `;
 
 const parsedQif = parseQif(qif);
 assert.equal(parsedQif.accounts.length, 3);
-assert.equal(parsedQif.transactions.length, 12);
+assert.equal(parsedQif.transactions.length, 10);
+assert.equal(parsedQif.repeatedAccountRecords, 0);
 
-const asOfSeptember = new Date(2026, 8, 8);
-const qifPreview = previewQuickenImport("quicken.qif", qif, asOfSeptember);
+const qifPreview = previewQuickenImport("quicken.qif", qif, new Date(2026, 8, 8));
 assert.equal(qifPreview.investedAssets, 250000);
 assert.equal(qifPreview.cash, 12000);
 assert.equal(qifPreview.debt, 4200);
@@ -93,7 +83,7 @@ assert.equal(qifPreview.monthlyIncome, 3000);
 assert.equal(qifPreview.monthlyExpenses, 1000);
 assert.equal(qifPreview.monthlyGiving, 300);
 assert.deepEqual(qifPreview.monthsUsed, ["2026-06", "2026-07", "2026-08"]);
-assert.ok(!qifPreview.monthsUsed.includes("2026-09"));
+assert.equal(qifPreview.baselineTransactions, 9);
 assert.equal(qifPreview.accountAudit[0]?.classification, "cash");
 assert.equal(qifPreview.accountAudit[1]?.classification, "invested");
 assert.equal(qifPreview.accountAudit[2]?.classification, "debt");
@@ -105,7 +95,6 @@ assert.equal(qifPreview.monthlyAudit[0]?.living, 1000);
 assert.equal(qifPreview.monthlyAudit[0]?.giving, 300);
 assert.equal(qifPreview.coverage.reviewAccounts, 0);
 assert.ok(qifPreview.coverage.transactionCoverage > 0.9);
-assert.match(qifPreview.warnings.join(" "), /3 completed months/);
 
 const creditCardWithCashInName = `!Account
 NAmEx Blue Cash Preferred
@@ -113,18 +102,52 @@ TCCard
 $-1250
 ^
 `;
-const creditCardPreview = previewQuickenImport("blue-cash.qif", creditCardWithCashInName, asOfSeptember);
+const creditCardPreview = previewQuickenImport("blue-cash.qif", creditCardWithCashInName);
 assert.equal(creditCardPreview.accountAudit[0]?.classification, "debt");
 assert.equal(creditCardPreview.accountAudit[0]?.confidence, "high");
 assert.equal(creditCardPreview.debt, 1250);
 assert.equal(creditCardPreview.cash, null);
 assert.match(creditCardPreview.accountAudit[0]?.reason ?? "", /Quicken liability account type/);
 
+const repeatedAccountQif = `!Account
+NChecking
+TBank
+^
+!Type:Bank
+D1/05/26
+T100
+PDeposit
+LIncome
+^
+!Account
+NChecking
+TBank
+$1500
+^
+!Type:Bank
+D2/05/26
+T-50
+PStore
+LHousehold
+^
+`;
+const repeatedAccountParsed = parseQif(repeatedAccountQif);
+assert.equal(repeatedAccountParsed.accounts.length, 1);
+assert.equal(repeatedAccountParsed.repeatedAccountRecords, 1);
+assert.equal(repeatedAccountParsed.accounts[0]?.balance, 1500);
+assert.equal(repeatedAccountParsed.transactions.length, 2);
+const repeatedAccountPreview = previewQuickenImport("repeat.qif", repeatedAccountQif, new Date(2026, 8, 8));
+assert.equal(repeatedAccountPreview.accounts, 1);
+assert.equal(repeatedAccountPreview.repeatedAccountRecords, 1);
+assert.match(repeatedAccountPreview.warnings.join(" "), /repeated QIF account record/);
+
 const csv = `Date,Account,Account Type,Payee,Category,Amount,Balance\n8/1/26,Checking,Bank,Employer,Salary,3000,12000\n8/2/26,Checking,Bank,Store,Household,-900,12000\n8/3/26,Checking,Bank,Church,Donation,-200,12000\n`;
 const parsedCsv = parseCsv(csv);
 assert.equal(parsedCsv.transactions.length, 3);
 assert.equal(parsedCsv.accounts.length, 1);
-const csvPreview = previewQuickenImport("transactions.csv", csv, asOfSeptember);
+assert.equal(parsedCsv.repeatedAccountRecords, 0);
+
+const csvPreview = previewQuickenImport("transactions.csv", csv, new Date(2026, 8, 8));
 assert.equal(csvPreview.cash, 12000);
 assert.equal(csvPreview.monthlyIncome, 3000);
 assert.equal(csvPreview.monthlyExpenses, 900);
@@ -133,11 +156,37 @@ assert.equal(csvPreview.accountAudit[0]?.classification, "cash");
 assert.equal(csvPreview.transactionAudit[2]?.classification, "giving");
 
 const uncertainCsv = `Date,Account,Account Type,Payee,Category,Amount,Balance\n8/1/26,Mystery,,Deposit,,500,1000\n`;
-const uncertain = previewQuickenImport("uncertain.csv", uncertainCsv, asOfSeptember);
+const uncertain = previewQuickenImport("uncertain.csv", uncertainCsv, new Date(2026, 8, 8));
 assert.equal(uncertain.accountAudit[0]?.classification, "review");
 assert.equal(uncertain.coverage.reviewAccounts, 1);
 assert.equal(uncertain.transactionAudit[0]?.confidence, "low");
 
-assert.throws(() => previewQuickenImport("archive.qxf", "anything", asOfSeptember), /QXF is not supported yet/);
+const currentMonthQif = `!Type:Bank
+D6/01/26
+T1000
+PIncome
+LSalary
+^
+D7/01/26
+T1000
+PIncome
+LSalary
+^
+D8/01/26
+T1000
+PIncome
+LSalary
+^
+D9/01/26
+T9000
+PPartial month
+LSalary
+^
+`;
+const completedMonths = previewQuickenImport("current-month.qif", currentMonthQif, new Date(2026, 8, 8));
+assert.deepEqual(completedMonths.monthsUsed, ["2026-06", "2026-07", "2026-08"]);
+assert.equal(completedMonths.monthlyIncome, 1000);
+
+assert.throws(() => previewQuickenImport("archive.qxf", "anything"), /QXF is not supported yet/);
 
 console.log("quicken tests passed");
