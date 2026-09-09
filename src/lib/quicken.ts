@@ -1,6 +1,6 @@
 export type QuickenFileKind = "qif" | "csv";
 export type AccountClass = "invested" | "cash" | "debt" | "review";
-export type TransactionClass = "income" | "living" | "giving" | "transfer" | "ignored";
+export type TransactionClass = "income" | "living" | "giving" | "transfer" | "review" | "ignored";
 export type Confidence = "high" | "medium" | "low";
 
 export type QuickenAccount = { name: string; type: string; balance: number | null };
@@ -59,6 +59,32 @@ function isGiving(category: string): boolean {
   return ["giving", "tithe", "tithes", "charity", "charitable", "donation", "donations", "offering", "church offering", "ministry"].some((term) => value.includes(term));
 }
 
+function transactionText(item: QuickenTransaction) {
+  return `${item.payee} ${item.category} ${item.memo}`.toLowerCase();
+}
+
+function looksLikeInvestmentActivity(item: QuickenTransaction) {
+  const text = transactionText(item);
+  const account = item.account.toLowerCase();
+  return /\b(brokerage|investment|securities|401k|403b|ira|roth|pcr?a|trust|tradeking|optionshouse)\b/.test(account)
+    || /\b(buy|sell|sold|sale proceeds|capital gain|reinvest|reinvestment|security purchase|security sale|stock purchase|stock sale|mutual fund|redemption|maturity proceeds)\b/.test(text);
+}
+
+function looksLikeLoanOrDebtMovement(item: QuickenTransaction) {
+  const text = transactionText(item);
+  return /\b(loan proceeds?|loan advance|loan draw|heloc draw|line of credit draw|cash advance|borrowed funds?|principal payment|mortgage principal|loan principal|heloc payment)\b/.test(text);
+}
+
+function looksLikeReimbursementOrRefund(item: QuickenTransaction) {
+  const text = transactionText(item);
+  return /\b(reimburse(?:ment|d)?|expense reimbursement|refund|rebate|returned purchase|purchase return|merchant credit|tax refund)\b/.test(text);
+}
+
+function looksLikeCreditCardPayment(item: QuickenTransaction) {
+  const text = transactionText(item);
+  return /\b(credit card payment|card payment|cc payment|payment to (?:amex|american express|visa|mastercard|discover))\b/.test(text);
+}
+
 function classifyAccount(account: QuickenAccount): AccountAudit {
   const type = account.type.trim().toLowerCase();
   const name = account.name.toLowerCase();
@@ -77,9 +103,13 @@ function classifyAccount(account: QuickenAccount): AccountAudit {
 function classifyTransaction(item: QuickenTransaction): TransactionAudit {
   if (!item.date || item.amount === 0) return { ...item, classification: "ignored", confidence: "high", includedInAverage: false, reason: !item.date ? "Missing/invalid date." : "Zero amount." };
   if (isTransfer(item.category)) return { ...item, classification: "transfer", confidence: "high", includedInAverage: false, reason: "Category looks like a transfer, so it is excluded from income/spending averages." };
-  if (item.amount > 0) return { ...item, classification: "income", confidence: item.category ? "medium" : "low", includedInAverage: true, reason: "Positive non-transfer amount is treated as income." };
+  if (looksLikeCreditCardPayment(item)) return { ...item, classification: "review", confidence: "low", includedInAverage: false, reason: "Looks like a credit-card payment; excluded until verified so purchases are not counted twice." };
+  if (looksLikeInvestmentActivity(item)) return { ...item, classification: "review", confidence: "low", includedInAverage: false, reason: "Looks like investment or asset-sale activity; excluded from ordinary income/living averages until verified." };
+  if (looksLikeLoanOrDebtMovement(item)) return { ...item, classification: "review", confidence: "low", includedInAverage: false, reason: "Looks like loan proceeds, a draw, or debt principal movement; excluded from ordinary cash-flow averages until verified." };
+  if (looksLikeReimbursementOrRefund(item)) return { ...item, classification: "review", confidence: "low", includedInAverage: false, reason: "Looks like a reimbursement/refund rather than recurring income or ordinary spending; excluded until verified." };
+  if (item.amount > 0) return { ...item, classification: "income", confidence: item.category ? "medium" : "low", includedInAverage: true, reason: "Positive non-transfer amount with no non-routine warning signs is treated as income." };
   if (isGiving(item.category)) return { ...item, classification: "giving", confidence: "high", includedInAverage: true, reason: "Negative amount with a giving-related category." };
-  return { ...item, classification: "living", confidence: item.category ? "medium" : "low", includedInAverage: true, reason: "Negative non-transfer, non-giving amount is treated as living spending." };
+  return { ...item, classification: "living", confidence: item.category ? "medium" : "low", includedInAverage: true, reason: "Negative non-transfer amount with no non-routine warning signs is treated as living spending." };
 }
 
 function buildMonthlyAudit(audit: TransactionAudit[], now: Date) {
@@ -218,7 +248,9 @@ export function previewQuickenImport(fileName: string, text: string, now = new D
   if (balances.investedAssets === null && balances.cash === null && balances.debt === null) warnings.push("No usable account balances were found. Balance-sheet fields will be left unchanged.");
   if (averages.monthsUsed.length > 0 && averages.monthsUsed.length < 12) warnings.push(`Only ${averages.monthsUsed.length} completed month${averages.monthsUsed.length === 1 ? "" : "s"} of transaction history were available for the 12-month baseline.`);
   if (parsed.repeatedAccountRecords > 0) warnings.push(`${parsed.repeatedAccountRecords} repeated QIF account record${parsed.repeatedAccountRecords === 1 ? " was" : "s were"} collapsed so account totals are not inflated by duplicate account declarations.`);
-  const reviewTransactions = transactionAudit.filter((item) => item.confidence === "low").length;
+  const heldForReview = transactionAudit.filter((item) => item.classification === "review").length;
+  if (heldForReview > 0) warnings.push(`${heldForReview} transaction${heldForReview === 1 ? " was" : "s were"} excluded from the baseline because they look like investment activity, debt movement, reimbursements/refunds, or credit-card payments and need review.`);
+  const reviewTransactions = transactionAudit.filter((item) => item.classification === "review" || item.confidence === "low").length;
   const classifiedTransactions = transactionAudit.length - reviewTransactions;
   const reviewAccounts = accountAudit.filter((item) => item.classification === "review").length;
   const classifiedAccounts = accountAudit.length - reviewAccounts;
