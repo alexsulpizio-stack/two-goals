@@ -9,7 +9,27 @@ export type AccountAudit = QuickenAccount & { classification: AccountClass; conf
 export type TransactionAudit = QuickenTransaction & { classification: TransactionClass; confidence: Confidence; includedInAverage: boolean; reason: string };
 export type MonthAudit = { month: string; income: number; living: number; giving: number; transfers: number; includedTransactions: number };
 export type QuickenCoverage = { classifiedTransactions: number; reviewTransactions: number; classifiedAccounts: number; reviewAccounts: number; transactionCoverage: number; accountCoverage: number };
-export type QuickenImportPreview = { kind: QuickenFileKind; transactions: number; accounts: number; monthsUsed: string[]; monthlyIncome: number | null; monthlyExpenses: number | null; monthlyGiving: number | null; investedAssets: number | null; cash: number | null; debt: number | null; warnings: string[]; accountAudit: AccountAudit[]; transactionAudit: TransactionAudit[]; monthlyAudit: MonthAudit[]; coverage: QuickenCoverage };
+export type QuickenImportPreview = {
+  kind: QuickenFileKind;
+  transactions: number;
+  baselineTransactions: number;
+  accounts: number;
+  repeatedAccountRecords: number;
+  monthsUsed: string[];
+  monthlyIncome: number | null;
+  monthlyExpenses: number | null;
+  monthlyGiving: number | null;
+  investedAssets: number | null;
+  cash: number | null;
+  debt: number | null;
+  warnings: string[];
+  accountAudit: AccountAudit[];
+  transactionAudit: TransactionAudit[];
+  monthlyAudit: MonthAudit[];
+  coverage: QuickenCoverage;
+};
+
+type ParsedQuicken = { accounts: QuickenAccount[]; transactions: QuickenTransaction[]; repeatedAccountRecords: number };
 
 function money(raw: unknown): number {
   const cleaned = String(raw ?? "").trim().replace(/[$,]/g, "").replace(/^\((.*)\)$/, "-$1");
@@ -68,10 +88,23 @@ function buildMonthlyAudit(audit: TransactionAudit[], now: Date) {
   const monthsUsed = availableMonths.slice(-12);
   const monthlyAudit: MonthAudit[] = monthsUsed.map((month) => {
     const rows = audit.filter((item) => item.date?.startsWith(month));
-    return { month, income: rows.filter((item) => item.classification === "income").reduce((sum, item) => sum + item.amount, 0), living: rows.filter((item) => item.classification === "living").reduce((sum, item) => sum + Math.abs(item.amount), 0), giving: rows.filter((item) => item.classification === "giving").reduce((sum, item) => sum + Math.abs(item.amount), 0), transfers: rows.filter((item) => item.classification === "transfer").reduce((sum, item) => sum + Math.abs(item.amount), 0), includedTransactions: rows.filter((item) => item.includedInAverage).length };
+    return {
+      month,
+      income: rows.filter((item) => item.classification === "income").reduce((sum, item) => sum + item.amount, 0),
+      living: rows.filter((item) => item.classification === "living").reduce((sum, item) => sum + Math.abs(item.amount), 0),
+      giving: rows.filter((item) => item.classification === "giving").reduce((sum, item) => sum + Math.abs(item.amount), 0),
+      transfers: rows.filter((item) => item.classification === "transfer").reduce((sum, item) => sum + Math.abs(item.amount), 0),
+      includedTransactions: rows.filter((item) => item.includedInAverage).length,
+    };
   });
   if (!monthlyAudit.length) return { monthsUsed, monthlyAudit, monthlyIncome: null, monthlyExpenses: null, monthlyGiving: null };
-  return { monthsUsed, monthlyAudit, monthlyIncome: monthlyAudit.reduce((sum, row) => sum + row.income, 0) / monthlyAudit.length, monthlyExpenses: monthlyAudit.reduce((sum, row) => sum + row.living, 0) / monthlyAudit.length, monthlyGiving: monthlyAudit.reduce((sum, row) => sum + row.giving, 0) / monthlyAudit.length };
+  return {
+    monthsUsed,
+    monthlyAudit,
+    monthlyIncome: monthlyAudit.reduce((sum, row) => sum + row.income, 0) / monthlyAudit.length,
+    monthlyExpenses: monthlyAudit.reduce((sum, row) => sum + row.living, 0) / monthlyAudit.length,
+    monthlyGiving: monthlyAudit.reduce((sum, row) => sum + row.giving, 0) / monthlyAudit.length,
+  };
 }
 
 function accountTotals(accountAudit: AccountAudit[]) {
@@ -85,21 +118,51 @@ function accountTotals(accountAudit: AccountAudit[]) {
   return { investedAssets: investedSeen ? invested : null, cash: cashSeen ? cash : null, debt: debtSeen ? debt : null };
 }
 
-export function parseQif(text: string): { accounts: QuickenAccount[]; transactions: QuickenTransaction[] } {
+function accountKey(account: QuickenAccount) {
+  return `${account.name.trim().toLowerCase()}\u0000${account.type.trim().toLowerCase()}`;
+}
+
+export function parseQif(text: string): ParsedQuicken {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  const accounts: QuickenAccount[] = []; const transactions: QuickenTransaction[] = []; let section = ""; let currentAccount = ""; let record: Record<string, string> = {};
+  const accountsByKey = new Map<string, QuickenAccount>();
+  const transactions: QuickenTransaction[] = [];
+  let repeatedAccountRecords = 0;
+  let section = "";
+  let currentAccount = "";
+  let record: Record<string, string> = {};
   const flush = () => {
     if (!Object.keys(record).length) return;
-    if (section === "account") { const account = { name: record.N ?? "Unnamed account", type: record.T ?? "", balance: record.$ !== undefined ? money(record.$) : null }; accounts.push(account); currentAccount = account.name; }
-    else if (section === "transaction") transactions.push({ date: normalizeDate(record.D ?? ""), amount: money(record.T ?? "0"), payee: record.P ?? "", category: record.L ?? "", memo: record.M ?? "", account: currentAccount });
+    if (section === "account") {
+      const account = { name: record.N ?? "Unnamed account", type: record.T ?? "", balance: record.$ !== undefined ? money(record.$) : null };
+      const key = accountKey(account);
+      const existing = accountsByKey.get(key);
+      if (existing) {
+        repeatedAccountRecords += 1;
+        if (existing.balance === null && account.balance !== null) accountsByKey.set(key, account);
+      } else accountsByKey.set(key, account);
+      currentAccount = account.name;
+    } else if (section === "transaction") {
+      transactions.push({ date: normalizeDate(record.D ?? ""), amount: money(record.T ?? "0"), payee: record.P ?? "", category: record.L ?? "", memo: record.M ?? "", account: currentAccount });
+    }
     record = {};
   };
   for (const rawLine of lines) {
-    const line = rawLine.trimEnd(); if (!line) continue; if (line === "^") { flush(); continue; }
-    if (line.startsWith("!")) { flush(); if (line.toLowerCase() === "!account") section = "account"; else if (line.toLowerCase().startsWith("!type:")) section = "transaction"; else section = ""; continue; }
-    if (!section) continue; const key = line[0]; if (key && record[key] === undefined) record[key] = line.slice(1).trim();
+    const line = rawLine.trimEnd();
+    if (!line) continue;
+    if (line === "^") { flush(); continue; }
+    if (line.startsWith("!")) {
+      flush();
+      if (line.toLowerCase() === "!account") section = "account";
+      else if (line.toLowerCase().startsWith("!type:")) section = "transaction";
+      else section = "";
+      continue;
+    }
+    if (!section) continue;
+    const key = line[0];
+    if (key && record[key] === undefined) record[key] = line.slice(1).trim();
   }
-  flush(); return { accounts, transactions };
+  flush();
+  return { accounts: Array.from(accountsByKey.values()), transactions, repeatedAccountRecords };
 }
 
 function parseCsvRows(text: string): string[][] {
@@ -121,20 +184,22 @@ function headerIndex(headers: string[], names: string[]) {
   return -1;
 }
 
-export function parseCsv(text: string): { accounts: QuickenAccount[]; transactions: QuickenTransaction[] } {
-  const rows = parseCsvRows(text); if (rows.length < 2) return { accounts: [], transactions: [] };
+export function parseCsv(text: string): ParsedQuicken {
+  const rows = parseCsvRows(text);
+  if (rows.length < 2) return { accounts: [], transactions: [], repeatedAccountRecords: 0 };
   const headers = rows[0]!.map((cell) => cell.trim());
   const accountIndex = headerIndex(headers, ["account", "account name"]), accountTypeIndex = headerIndex(headers, ["account type", "type"]), balanceIndex = headerIndex(headers, ["balance", "market value", "ending balance"]), dateIndex = headerIndex(headers, ["date", "transaction date"]), amountIndex = headerIndex(headers, ["amount", "net amount"]), inflowIndex = headerIndex(headers, ["inflow", "deposit", "credit"]), outflowIndex = headerIndex(headers, ["outflow", "payment", "debit"]), categoryIndex = headerIndex(headers, ["category"]), payeeIndex = headerIndex(headers, ["payee", "description"]), memoIndex = headerIndex(headers, ["memo", "notes"]);
   const accountsByName = new Map<string, QuickenAccount>(); const transactions: QuickenTransaction[] = [];
   for (const row of rows.slice(1)) {
     const accountName = accountIndex >= 0 ? (row[accountIndex] ?? "").trim() : "";
     if (accountName && balanceIndex >= 0) accountsByName.set(accountName, { name: accountName, type: accountTypeIndex >= 0 ? (row[accountTypeIndex] ?? "").trim() : "", balance: money(row[balanceIndex]) });
-    if (dateIndex < 0) continue; let amount = 0;
+    if (dateIndex < 0) continue;
+    let amount = 0;
     if (amountIndex >= 0) amount = money(row[amountIndex]); else amount = (inflowIndex >= 0 ? money(row[inflowIndex]) : 0) - Math.abs(outflowIndex >= 0 ? money(row[outflowIndex]) : 0);
     if (amount === 0 && amountIndex < 0 && inflowIndex < 0 && outflowIndex < 0) continue;
     transactions.push({ date: normalizeDate(row[dateIndex] ?? ""), amount, payee: payeeIndex >= 0 ? (row[payeeIndex] ?? "").trim() : "", category: categoryIndex >= 0 ? (row[categoryIndex] ?? "").trim() : "", memo: memoIndex >= 0 ? (row[memoIndex] ?? "").trim() : "", account: accountName });
   }
-  return { accounts: Array.from(accountsByName.values()), transactions };
+  return { accounts: Array.from(accountsByName.values()), transactions, repeatedAccountRecords: 0 };
 }
 
 export function previewQuickenImport(fileName: string, text: string, now = new Date()): QuickenImportPreview {
@@ -143,11 +208,40 @@ export function previewQuickenImport(fileName: string, text: string, now = new D
   const kind: QuickenFileKind = lower.endsWith(".qif") ? "qif" : "csv";
   const parsed = kind === "qif" ? parseQif(text) : parseCsv(text);
   if (!parsed.accounts.length && !parsed.transactions.length) throw new Error("No Quicken accounts or transactions could be read from this file.");
-  const accountAudit = parsed.accounts.map(classifyAccount); const transactionAudit = parsed.transactions.map(classifyTransaction); const averages = buildMonthlyAudit(transactionAudit, now); const balances = accountTotals(accountAudit); const warnings: string[] = [];
+  const accountAudit = parsed.accounts.map(classifyAccount);
+  const transactionAudit = parsed.transactions.map(classifyTransaction);
+  const averages = buildMonthlyAudit(transactionAudit, now);
+  const balances = accountTotals(accountAudit);
+  const baselineTransactions = averages.monthlyAudit.reduce((sum, row) => sum + row.includedTransactions, 0);
+  const warnings: string[] = [];
   if (!parsed.transactions.length) warnings.push("No transaction rows were found, so monthly income and spending were not estimated.");
   if (balances.investedAssets === null && balances.cash === null && balances.debt === null) warnings.push("No usable account balances were found. Balance-sheet fields will be left unchanged.");
   if (averages.monthsUsed.length > 0 && averages.monthsUsed.length < 12) warnings.push(`Only ${averages.monthsUsed.length} completed month${averages.monthsUsed.length === 1 ? "" : "s"} of transaction history were available for the 12-month baseline.`);
-  const reviewTransactions = transactionAudit.filter((item) => item.confidence === "low").length; const classifiedTransactions = transactionAudit.length - reviewTransactions; const reviewAccounts = accountAudit.filter((item) => item.classification === "review").length; const classifiedAccounts = accountAudit.length - reviewAccounts;
-  const coverage: QuickenCoverage = { classifiedTransactions, reviewTransactions, classifiedAccounts, reviewAccounts, transactionCoverage: transactionAudit.length ? classifiedTransactions / transactionAudit.length : 0, accountCoverage: accountAudit.length ? classifiedAccounts / accountAudit.length : 0 };
-  return { kind, transactions: parsed.transactions.length, accounts: parsed.accounts.length, ...averages, ...balances, warnings, accountAudit, transactionAudit, monthlyAudit: averages.monthlyAudit, coverage };
+  if (parsed.repeatedAccountRecords > 0) warnings.push(`${parsed.repeatedAccountRecords} repeated QIF account record${parsed.repeatedAccountRecords === 1 ? " was" : "s were"} collapsed so account totals are not inflated by duplicate account declarations.`);
+  const reviewTransactions = transactionAudit.filter((item) => item.confidence === "low").length;
+  const classifiedTransactions = transactionAudit.length - reviewTransactions;
+  const reviewAccounts = accountAudit.filter((item) => item.classification === "review").length;
+  const classifiedAccounts = accountAudit.length - reviewAccounts;
+  const coverage: QuickenCoverage = {
+    classifiedTransactions,
+    reviewTransactions,
+    classifiedAccounts,
+    reviewAccounts,
+    transactionCoverage: transactionAudit.length ? classifiedTransactions / transactionAudit.length : 0,
+    accountCoverage: accountAudit.length ? classifiedAccounts / accountAudit.length : 0,
+  };
+  return {
+    kind,
+    transactions: parsed.transactions.length,
+    baselineTransactions,
+    accounts: parsed.accounts.length,
+    repeatedAccountRecords: parsed.repeatedAccountRecords,
+    ...averages,
+    ...balances,
+    warnings,
+    accountAudit,
+    transactionAudit,
+    monthlyAudit: averages.monthlyAudit,
+    coverage,
+  };
 }
