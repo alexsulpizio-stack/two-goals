@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isGuideRequestAuthorized } from "@/lib/guide-access";
 import {
   isGatewayBillingError,
   readVercelOidcTokenFromRequestContext,
@@ -145,7 +146,21 @@ function rateLimit(request: Request): { allowed: boolean; retryAfter: number } {
   return { allowed: true, retryAfter: 0 };
 }
 
-export async function GET() {
+function unauthorizedResponse() {
+  return NextResponse.json(
+    {
+      error: "Guide is locked. Enter the private Guide access password first.",
+      code: "guide_locked",
+    },
+    { status: 401, headers: { "Cache-Control": "no-store" } }
+  );
+}
+
+export async function GET(request: Request) {
+  if (!isGuideRequestAuthorized(request, process.env)) {
+    return unauthorizedResponse();
+  }
+
   const transport = guideTransport();
 
   return NextResponse.json(
@@ -179,6 +194,10 @@ export async function POST(request: Request) {
       { error: "Guide only accepts requests from Two Goals.", code: "forbidden_origin" },
       { status: 403 }
     );
+  }
+
+  if (!isGuideRequestAuthorized(request, process.env)) {
+    return unauthorizedResponse();
   }
 
   const contentLength = Number(request.headers.get("content-length") ?? "0");
