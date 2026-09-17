@@ -13,7 +13,7 @@ import { addMonths, formatMonthYear, todayKey } from "@/lib/dates";
 import { formatDuration, formatMoney, formatPercent, independencePlan, sprintPlan } from "@/lib/finance";
 import { ledgerFromFinance, upsertTodaySnapshot } from "@/lib/ledger";
 import { nextMove } from "@/lib/next-move";
-import type { FinanceInputs, SprintMonths, StreamStatus } from "@/lib/types";
+import type { FinanceInputs, LivingCategory, SprintMonths, StreamStatus } from "@/lib/types";
 
 const moneyFields: Array<{ key: keyof Pick<FinanceInputs, "netWorth" | "cash" | "emergencyReserve" | "debt" | "monthlyIncome" | "monthlyExpenses" | "monthlyGiving">; label: string; hint: string }> = [
   { key: "netWorth", label: "Invested assets", hint: "Retirement and taxable investment balances that support independence." },
@@ -70,6 +70,14 @@ export function IndependenceView() {
 
   const remaining = Math.max(0, plan.fiNumber - plan.fiCapital);
   const grossGap = Number.isFinite(sprint.grossIncomeLift) ? formatMoney(sprint.grossIncomeLift) : "—";
+  const livingCategories = finance.livingCategories ?? [];
+  const categorizedLiving = livingCategories.reduce((sum, category) => sum + Math.max(0, category.monthly), 0);
+  const unallocatedLiving = Math.max(0, finance.monthlyExpenses - categorizedLiving);
+
+  function updateLivingCategory(category: LivingCategory, monthly: number) {
+    const nextCategories = livingCategories.map((item) => item.id === category.id ? { ...item, monthly } : item);
+    updateFinance({ livingCategories: nextCategories, monthlyExpenses: nextCategories.reduce((sum, item) => sum + item.monthly, 0) });
+  }
 
   return (
     <div className="flex flex-col gap-8 sm:gap-10">
@@ -154,10 +162,20 @@ export function IndependenceView() {
           <div className="flex flex-col gap-3">
             <div>
               <p className="text-xs tracking-[0.18em] text-muted-foreground uppercase">Monthly life cost</p>
-              <p className="mt-1 text-sm text-muted-foreground">Need currently uses your living total plus giving. Living is one combined number here, not category-level spending.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Enter the monthly amount for each category. Their total becomes Monthly living and feeds Need.</p>
             </div>
             <div className="divide-y rounded-xl border">
-              <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm"><span>Living</span><span className="tabular-nums">{formatMoney(finance.monthlyExpenses)} / month</span></div>
+              {livingCategories.map((category) => (
+                <div key={category.id} className="flex items-center justify-between gap-4 px-4 py-2 text-sm">
+                  <span>{category.name}</span>
+                  <div className="relative w-32">
+                    <span className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground">$</span>
+                    <Input aria-label={`${category.name} monthly amount`} className="h-8 pl-6 text-right" inputMode="decimal" value={category.monthly || ""} onChange={(event) => updateLivingCategory(category, numeric(event.target.value))} />
+                  </div>
+                </div>
+              ))}
+              {unallocatedLiving > 0 ? <div className="flex items-center justify-between gap-4 bg-amber-50 px-4 py-3 text-sm text-amber-950"><span>Unallocated from previous total</span><span className="tabular-nums">{formatMoney(unallocatedLiving)} / month</span></div> : null}
+              <div className="flex items-center justify-between gap-4 bg-muted/50 px-4 py-3 text-sm font-medium"><span>Monthly living total</span><span className="tabular-nums">{formatMoney(finance.monthlyExpenses)} / month</span></div>
               <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm"><span>Giving</span><span className="tabular-nums">{formatMoney(finance.monthlyGiving)} / month</span></div>
               <div className="flex items-center justify-between gap-4 bg-muted/50 px-4 py-3 text-sm font-medium"><span>Annual spending</span><span className="tabular-nums">{formatMoney(plan.annualSpend)} / year</span></div>
             </div>

@@ -23,6 +23,12 @@ export type NextStream = {
   status: StreamStatus;
 };
 
+export type LivingCategory = {
+  id: string;
+  name: string;
+  monthly: number;
+};
+
 export type FinanceInputs = {
   netWorth: number;
   cash: number;
@@ -31,6 +37,7 @@ export type FinanceInputs = {
   monthlyIncome: number;
   monthlyExpenses: number;
   monthlyGiving: number;
+  livingCategories: LivingCategory[];
   incomeSources: IncomeSource[];
   nextStream: NextStream;
   expectedReturn: number;
@@ -81,6 +88,15 @@ export const defaultFinance: FinanceInputs = {
   monthlyIncome: 0,
   monthlyExpenses: 0,
   monthlyGiving: 0,
+  livingCategories: [
+    { id: "housing", name: "Housing", monthly: 0 },
+    { id: "food", name: "Food", monthly: 0 },
+    { id: "utilities", name: "Utilities", monthly: 0 },
+    { id: "transportation", name: "Transportation", monthly: 0 },
+    { id: "insurance", name: "Insurance", monthly: 0 },
+    { id: "health", name: "Health", monthly: 0 },
+    { id: "other", name: "Other living", monthly: 0 },
+  ],
   incomeSources: [{ id: "income-1", name: "", monthly: 0 }],
   nextStream: { name: "", monthly: 0, ask: "", status: "blank" },
   expectedReturn: 5,
