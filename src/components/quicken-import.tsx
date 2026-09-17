@@ -212,11 +212,11 @@ export function QuickenImport() {
                     <input type="checkbox" checked={selected[key]} disabled={!available} onChange={(event) => setSelected((previous) => previous ? { ...previous, [key]: event.target.checked } : previous)} className="size-4" />
                     <span>
                       <span className="block text-sm font-medium">{labels[key].title}</span>
-                      <span className="block text-xs leading-relaxed text-muted-foreground">{labels[key].detail} Current: {formatMoney(current)}.</span>
+                      <span className="block text-xs leading-relaxed text-muted-foreground">{labels[key].detail} {available ? <>Current: {formatMoney(current)}.</> : <>No balance found in Quicken — current value {formatMoney(current)} will remain unchanged.</>}</span>
                     </span>
                     <div className="relative">
                       <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                      <Input inputMode="decimal" className="pl-6" value={draft[key]} disabled={!available} onChange={(event) => setDraft((previous) => previous ? { ...previous, [key]: event.target.value } : previous)} aria-label={`${labels[key].title} imported value`} />
+                      <Input inputMode="decimal" className="pl-6" value={available ? draft[key] : String(Math.round(current))} disabled={!available} onChange={(event) => setDraft((previous) => previous ? { ...previous, [key]: event.target.value } : previous)} aria-label={`${labels[key].title} imported value`} />
                     </div>
                   </label>
                 );
