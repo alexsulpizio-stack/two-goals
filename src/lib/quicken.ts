@@ -21,6 +21,7 @@ export type QuickenImportPreview = {
   monthlyIncome: number | null;
   monthlyExpenses: number | null;
   monthlyGiving: number | null;
+  livingCategoryAverages: Record<string, number>;
   investedAssets: number | null;
   cash: number | null;
   debt: number | null;
@@ -130,13 +131,17 @@ function buildMonthlyAudit(audit: TransactionAudit[], now: Date) {
       includedTransactions: rows.filter((item) => item.includedInAverage).length,
     };
   });
-  if (!monthlyAudit.length) return { monthsUsed, monthlyAudit, monthlyIncome: null, monthlyExpenses: null, monthlyGiving: null };
+  if (!monthlyAudit.length) return { monthsUsed, monthlyAudit, monthlyIncome: null, monthlyExpenses: null, monthlyGiving: null, livingCategoryAverages: {} };
+  const livingCategoryAverages = Object.fromEntries(["housing", "food", "utilities", "transportation", "insurance", "health", "other"].map((category) => [category,
+    audit.filter((item) => item.classification === "living" && item.date && monthsUsed.includes(item.date.slice(0, 7)) && livingCategory(item.category) === category).reduce((sum, item) => sum + Math.abs(item.amount), 0) / monthsUsed.length,
+  ]));
   return {
     monthsUsed,
     monthlyAudit,
     monthlyIncome: monthlyAudit.reduce((sum, row) => sum + row.income, 0) / monthlyAudit.length,
     monthlyExpenses: monthlyAudit.reduce((sum, row) => sum + row.living, 0) / monthlyAudit.length,
     monthlyGiving: monthlyAudit.reduce((sum, row) => sum + row.giving, 0) / monthlyAudit.length,
+    livingCategoryAverages,
   };
 }
 
@@ -153,6 +158,17 @@ function accountTotals(accountAudit: AccountAudit[]) {
 
 function accountKey(account: QuickenAccount) {
   return `${account.name.trim().toLowerCase()}\u0000${account.type.trim().toLowerCase()}`;
+}
+
+function livingCategory(category: string): string {
+  const value = category.toLowerCase();
+  if (/housing|rent|mortgage|property tax|home/.test(value)) return "housing";
+  if (/grocery|food|restaurant|dining|coffee/.test(value)) return "food";
+  if (/utility|electric|gas|water|phone|internet|cable/.test(value)) return "utilities";
+  if (/auto|car|fuel|gasoline|parking|transit|transport/.test(value)) return "transportation";
+  if (/insurance/.test(value)) return "insurance";
+  if (/medical|health|doctor|dental|pharmacy|prescription/.test(value)) return "health";
+  return "other";
 }
 
 export function parseAccountBalancesXlsx(data: ArrayBuffer): ParsedQuicken {

@@ -18,7 +18,7 @@ const labels: Record<MetricKey, { title: string; detail: string }> = {
   cash: { title: "Cash", detail: "Recognized checking, savings, cash, and money-market balances." },
   debt: { title: "Debt", detail: "Recognized credit cards, loans, mortgages, and liabilities." },
   monthlyIncome: { title: "Average monthly income", detail: "Average positive non-transfer transactions from the months shown below." },
-  monthlyExpenses: { title: "Average monthly living", detail: "Average negative transactions excluding giving and transfers." },
+  monthlyExpenses: { title: "Average monthly living", detail: "Average negative transactions excluding giving and transfers. Approving this also fills the category estimates from Quicken categories." },
   monthlyGiving: { title: "Average monthly giving", detail: "Average spending in categories recognized as giving." },
 };
 
@@ -122,6 +122,12 @@ export function QuickenImport() {
       if (selected.monthlyIncome) {
         finance.monthlyIncome = values.monthlyIncome;
         finance.incomeSources = [{ id: "quicken-import", name: "Quicken average", monthly: values.monthlyIncome }];
+      }
+      if (selected.monthlyExpenses && preview.livingCategoryAverages) {
+        finance.livingCategories = finance.livingCategories.map((category) => ({
+          ...category,
+          monthly: Math.round(preview.livingCategoryAverages[category.id] ?? (category.id === "other" ? values.monthlyExpenses : 0)),
+        }));
       }
       return { ...previous, finance };
     });
