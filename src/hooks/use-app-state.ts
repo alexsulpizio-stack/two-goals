@@ -241,7 +241,11 @@ export function useAppState() {
     cloudUserId = null;
     cloudEmail = null;
     cloudStatus = "signed_out";
-    storageMode = "local";
+    try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* unavailable */ }
+    try { window.sessionStorage.removeItem(STORAGE_KEY); } catch { /* unavailable */ }
+    current = defaultState;
+    storageMode = "memory";
+    cloudInitialized = false;
     listeners.forEach((listener) => listener());
   }, []);
 
