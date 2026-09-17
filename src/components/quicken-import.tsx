@@ -127,7 +127,23 @@ export function QuickenImport() {
       },
       accounts: preview.accountAudit,
       monthlyTotals: preview.monthlyAudit,
-      transactionDetails: includeTransactionDetails ? preview.transactionAudit.slice(0, 75) : "Not shared",
+      transactionDetails: includeTransactionDetails
+        ? preview.transactionAudit
+            .filter((item) => item.confidence === "low" || item.classification === "review")
+            .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+            .slice(0, 25)
+            .map(({ date, amount, payee, category, account, classification, confidence, includedInAverage, reason }) => ({
+              date,
+              amount,
+              payee: payee.slice(0, 120),
+              category: category.slice(0, 120),
+              account: account.slice(0, 120),
+              classification,
+              confidence,
+              includedInAverage,
+              reason: reason.slice(0, 180),
+            }))
+        : "Not shared",
     };
     try {
       const response = await fetch("/api/guide", {
@@ -227,7 +243,7 @@ export function QuickenImport() {
               </div>
               <label className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
                 <input type="checkbox" checked={includeTransactionDetails} onChange={(event) => setIncludeTransactionDetails(event.target.checked)} className="mt-0.5 size-4" />
-                Include up to 75 transaction rows in this AI review. Off by default. Payee/category details may be sensitive.
+                Include up to 25 highest-risk transaction rows in this AI review. Off by default. Payee/category details may be sensitive.
               </label>
               {guideError ? <p role="alert" className="mt-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">{guideError}</p> : null}
               {guideAnswer ? <div className="mt-3 whitespace-pre-wrap rounded-xl border border-border bg-background p-4 text-sm leading-7">{guideAnswer}</div> : null}
