@@ -10,7 +10,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 type GuideRequest = {
   question?: string;
@@ -283,6 +283,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify(requestBody),
       cache: "no-store",
+      signal: AbortSignal.timeout(55_000),
     });
 
     const payload = await parseResponse(response);
@@ -326,7 +327,13 @@ export async function POST(request: Request) {
       model: transport.model,
       credentialSource: transport.credentialSource,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      return NextResponse.json(
+        { error: "Guide took too long to answer. Try again with the transaction-details option turned off.", code: "provider_timeout" },
+        { status: 504 }
+      );
+    }
     return NextResponse.json(
       { error: "Guide could not reach the AI service.", code: "service_unavailable" },
       { status: 502 }

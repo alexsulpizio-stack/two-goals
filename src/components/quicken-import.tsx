@@ -162,7 +162,9 @@ export function QuickenImport() {
     };
     try {
       const response = await fetch("/api/guide", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: "Audit this Quicken import for likely misclassification or distorted averages. Tell me what I should verify before applying it.", context: auditContext }) });
-      const data = (await response.json()) as { answer?: string; error?: string };
+      const responseText = await response.text();
+      let data: { answer?: string; error?: string } = {};
+      try { data = JSON.parse(responseText) as { answer?: string; error?: string }; } catch { data.error = response.status === 504 ? "Guide took too long to answer. Try again with the transaction-details option turned off." : `Guide returned an unexpected response (${response.status}).`; }
       if (!response.ok) throw new Error(data.error || "Guide could not review this import.");
       setGuideAnswer(data.answer || "");
     } catch (error) {

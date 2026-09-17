@@ -150,13 +150,15 @@ export function GuidePanel({
         body: JSON.stringify({ question: prompt, context }),
       });
 
-      const data = (await response.json()) as {
+      const responseText = await response.text();
+      let data: {
         answer?: string;
         error?: string;
         code?: string;
         setupUrl?: string;
         alternative?: string;
-      };
+      } = {};
+      try { data = JSON.parse(responseText) as typeof data; } catch { data.error = response.status === 504 ? "Guide took too long to answer. Try again." : `Guide returned an unexpected response (${response.status}).`; }
 
       if (!response.ok) {
         if (data.code === "guide_locked") {
