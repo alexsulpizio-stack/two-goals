@@ -1,4 +1,6 @@
-export type QuickenFileKind = "qif" | "csv";
+import * as XLSX from "xlsx";
+
+export type QuickenFileKind = "qif" | "csv" | "xlsx" | "qif+xlsx";
 export type AccountClass = "invested" | "cash" | "debt" | "review";
 export type TransactionClass = "income" | "living" | "giving" | "transfer" | "review" | "ignored";
 export type Confidence = "high" | "medium" | "low";
@@ -90,6 +92,7 @@ function classifyAccount(account: QuickenAccount): AccountAudit {
   const name = account.name.toLowerCase();
   const included = account.balance !== null;
   if (type) {
+    if (type.includes("asset account")) return { ...account, classification: "review", confidence: "high", included: false, reason: "Quicken Account Balances asset section is kept separate from invested assets, cash, and debt." };
     if (type.includes("invst") || type.includes("investment")) return { ...account, classification: "invested", confidence: "high", included, reason: "Quicken investment account type matched." };
     if (type.includes("ccard") || type.includes("credit") || type.includes("oth l") || type.includes("liability")) return { ...account, classification: "debt", confidence: "high", included, reason: "Quicken liability account type matched." };
     if (type.includes("bank") || type.includes("cash")) return { ...account, classification: "cash", confidence: "high", included, reason: "Quicken cash/bank account type matched." };
@@ -150,6 +153,27 @@ function accountTotals(accountAudit: AccountAudit[]) {
 
 function accountKey(account: QuickenAccount) {
   return `${account.name.trim().toLowerCase()}\u0000${account.type.trim().toLowerCase()}`;
+}
+
+export function parseAccountBalancesXlsx(data: ArrayBuffer): ParsedQuicken {
+  const workbook = XLSX.read(data, { type: "array", cellDates: false });
+  const accounts: QuickenAccount[] = [];
+  const sectionNames = new Set(["Bank Accounts", "Cash Accounts", "Asset Accounts", "Credit Card Accounts", "Liability Accounts", "Investment Accounts"]);
+  for (const sheetName of workbook.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], { header: 1, raw: true, defval: null });
+    let section = "";
+    for (const row of rows) {
+      const name = typeof row[1] === "string" ? row[1].trim() : "";
+      if (sectionNames.has(name)) { section = name; continue; }
+      if (!section || !name || /^TOTAL\b/i.test(name) || /^OVERALL TOTAL$/i.test(name)) continue;
+      const rawBalance = row[2];
+      if (typeof rawBalance !== "number" && typeof rawBalance !== "string") continue;
+      const balanceText = String(rawBalance).trim();
+      if (!balanceText) continue;
+      accounts.push({ name, type: section, balance: money(balanceText) });
+    }
+  }
+  return { accounts, transactions: [], repeatedAccountRecords: 0 };
 }
 
 export function parseQif(text: string): ParsedQuicken {
@@ -232,11 +256,7 @@ export function parseCsv(text: string): ParsedQuicken {
   return { accounts: Array.from(accountsByName.values()), transactions, repeatedAccountRecords: 0 };
 }
 
-export function previewQuickenImport(fileName: string, text: string, now = new Date()): QuickenImportPreview {
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith(".qxf")) throw new Error("QXF is not supported yet. In Quicken Classic, export QIF or CSV instead.");
-  const kind: QuickenFileKind = lower.endsWith(".qif") ? "qif" : "csv";
-  const parsed = kind === "qif" ? parseQif(text) : parseCsv(text);
+function buildPreview(kind: QuickenFileKind, parsed: ParsedQuicken, now: Date): QuickenImportPreview {
   if (!parsed.accounts.length && !parsed.transactions.length) throw new Error("No Quicken accounts or transactions could be read from this file.");
   const accountAudit = parsed.accounts.map(classifyAccount);
   const transactionAudit = parsed.transactions.map(classifyTransaction);
@@ -275,5 +295,38 @@ export function previewQuickenImport(fileName: string, text: string, now = new D
     transactionAudit,
     monthlyAudit: averages.monthlyAudit,
     coverage,
+  };
+}
+
+export function previewQuickenImport(fileName: string, text: string, now = new Date()): QuickenImportPreview {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".qxf")) throw new Error("QXF is not supported yet. In Quicken Classic, export QIF or CSV instead.");
+  const kind: QuickenFileKind = lower.endsWith(".qif") ? "qif" : "csv";
+  return buildPreview(kind, kind === "qif" ? parseQif(text) : parseCsv(text), now);
+}
+
+export async function previewQuickenAccountBalances(fileName: string, data: ArrayBuffer, now = new Date()): Promise<QuickenImportPreview> {
+  if (!fileName.toLowerCase().endsWith(".xlsx")) throw new Error("This parser expects a Quicken Account Balances .xlsx workbook.");
+  const parsed = parseAccountBalancesXlsx(data);
+  if (!parsed.accounts.length) throw new Error("No Quicken Account Balances rows could be read from this workbook.");
+  return buildPreview("xlsx", parsed, now);
+}
+
+export function mergeQuickenPreviews(transactionPreview: QuickenImportPreview, balancePreview: QuickenImportPreview): QuickenImportPreview {
+  return {
+    ...transactionPreview,
+    kind: "qif+xlsx",
+    accounts: transactionPreview.accounts + balancePreview.accounts,
+    investedAssets: balancePreview.investedAssets,
+    cash: balancePreview.cash,
+    debt: balancePreview.debt,
+    warnings: [...transactionPreview.warnings, ...balancePreview.warnings.filter((warning) => !warning.startsWith("No transaction rows"))],
+    accountAudit: [...transactionPreview.accountAudit, ...balancePreview.accountAudit],
+    coverage: {
+      ...transactionPreview.coverage,
+      classifiedAccounts: transactionPreview.coverage.classifiedAccounts + balancePreview.coverage.classifiedAccounts,
+      reviewAccounts: transactionPreview.coverage.reviewAccounts + balancePreview.coverage.reviewAccounts,
+      accountCoverage: (transactionPreview.accounts + balancePreview.accounts) ? (transactionPreview.coverage.classifiedAccounts + balancePreview.coverage.classifiedAccounts) / (transactionPreview.accounts + balancePreview.accounts) : 0,
+    },
   };
 }

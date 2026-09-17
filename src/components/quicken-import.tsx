@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { useAppState } from "@/hooks/use-app-state";
 import { formatMoney } from "@/lib/finance";
-import { previewQuickenImport, type QuickenImportPreview } from "@/lib/quicken";
+import { mergeQuickenPreviews, previewQuickenAccountBalances, previewQuickenImport, type QuickenImportPreview } from "@/lib/quicken";
 
 type MetricKey = "netWorth" | "cash" | "debt" | "monthlyIncome" | "monthlyExpenses" | "monthlyGiving";
 type Draft = Record<MetricKey, string>;
@@ -63,15 +63,22 @@ export function QuickenImport() {
   const [guideError, setGuideError] = useState("");
   const [guideLoading, setGuideLoading] = useState(false);
 
-  async function readFile(file: File | undefined) {
-    if (!file) return;
+  async function readFiles(files: FileList | null) {
+    if (!files?.length) return;
     try {
-      const text = await file.text();
-      const next = previewQuickenImport(file.name, text);
+      const selectedFiles = Array.from(files);
+      const qifFile = selectedFiles.find((file) => file.name.toLowerCase().endsWith(".qif"));
+      const xlsxFile = selectedFiles.find((file) => file.name.toLowerCase().endsWith(".xlsx"));
+      if (selectedFiles.length > 1 && (!qifFile || !xlsxFile)) throw new Error("Choose one QIF and one Account Balances XLSX together, or choose a single export.");
+      const next = qifFile && xlsxFile
+        ? mergeQuickenPreviews(previewQuickenImport(qifFile.name, await qifFile.text()), await previewQuickenAccountBalances(xlsxFile.name, await xlsxFile.arrayBuffer()))
+        : xlsxFile
+          ? await previewQuickenAccountBalances(xlsxFile.name, await xlsxFile.arrayBuffer())
+          : previewQuickenImport(selectedFiles[0]!.name, await selectedFiles[0]!.text());
       setPreview(next);
       setDraft(asDraft(next));
       setSelected(asSelection());
-      setFileName(file.name);
+      setFileName(selectedFiles.map((file) => file.name).join(" + "));
       setMessage(null);
       setShowAudit(false);
       setGuideAnswer("");
@@ -80,7 +87,7 @@ export function QuickenImport() {
       setPreview(null);
       setDraft(null);
       setSelected(null);
-      setFileName(file.name);
+      setFileName(Array.from(files).map((file) => file.name).join(" + "));
       setMessage(error instanceof Error ? error.message : "Could not read this Quicken export.");
     } finally {
       if (inputRef.current) inputRef.current.value = "";
@@ -170,9 +177,9 @@ export function QuickenImport() {
       <CardHeader className="border-b"><CardDescription>Quicken Classic for Windows</CardDescription><CardTitle className="font-heading text-2xl">Import from Quicken</CardTitle></CardHeader>
       <CardContent className="flex flex-col gap-5 pt-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">Export QIF or CSV, inspect exactly how Two Goals classified it, then approve only the values you trust. The raw file stays in this browser.</p>
+          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">Choose a QIF for transaction history, an Account Balances XLSX for current balances, or both together. Inspect exactly how Two Goals classified them, then approve only the values you trust. The raw files stay in this browser.</p>
           <button type="button" onClick={() => inputRef.current?.click()} className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-steward px-4 text-sm font-medium text-white hover:bg-steward/90">Choose Quicken export</button>
-          <input ref={inputRef} type="file" accept=".qif,.csv,.txt,.qxf,text/csv,text/plain" className="sr-only" onChange={(event) => void readFile(event.target.files?.[0])} />
+          <input ref={inputRef} type="file" multiple accept=".qif,.csv,.txt,.qxf,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={(event) => void readFiles(event.target.files)} />
         </div>
 
         {preview && draft && selected ? (
