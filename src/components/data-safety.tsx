@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { useAppState, type StorageMode } from "@/hooks/use-app-state";
 
 const storageCopy: Record<StorageMode, { label: string; detail: string }> = {
+  cloud: { label: "Synced to your account", detail: "Your data is stored privately in Supabase and follows your sign-in." },
   local: {
     label: "Saved on this device",
     detail: "Your data should still be here after you close the browser.",
@@ -20,9 +21,11 @@ const storageCopy: Record<StorageMode, { label: string; detail: string }> = {
 };
 
 export function DataSafety() {
-  const { storageMode, exportBackup, importBackup, reset } = useAppState();
+  const { storageMode, cloudEmail, cloudStatus, signIn, signOut, exportBackup, importBackup, reset } = useAppState();
   const inputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
   const storage = storageCopy[storageMode];
 
   const downloadBackup = () => {
@@ -69,6 +72,14 @@ export function DataSafety() {
     setMessage("All local Two Goals data was erased.");
   };
 
+  const requestSignIn = async () => {
+    if (!email.trim()) return;
+    setSending(true);
+    try { await signIn(email.trim()); setMessage("Check your email for the secure Two Goals sign-in link."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Could not send the sign-in link."); }
+    finally { setSending(false); }
+  };
+
   return (
     <section
       aria-labelledby="data-safety-heading"
@@ -81,6 +92,10 @@ export function DataSafety() {
           </h2>
           <p className="text-sm font-medium text-foreground/90">{storage.label}</p>
           <p className="text-xs text-muted-foreground">{storage.detail}</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {cloudEmail ? <><span className="text-xs text-muted-foreground">{cloudEmail}</span><button type="button" onClick={() => void signOut()} className="rounded-full border border-border px-3 py-1.5 text-sm">Sign out</button></> : <><input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="Email for cloud sync" aria-label="Email for cloud sync" className="h-9 rounded-full border border-border bg-background px-3 text-sm" /><button type="button" onClick={() => void requestSignIn()} disabled={sending} className="rounded-full bg-foreground px-3 py-1.5 text-sm text-background disabled:opacity-50">{sending ? "Sending…" : "Sign in to sync"}</button></>}
         </div>
 
         <div className="flex flex-wrap gap-2">

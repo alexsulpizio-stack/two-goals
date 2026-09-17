@@ -16,11 +16,12 @@ import {
   type PracticeKind,
   type SprintMonths,
 } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
 
 const STORAGE_KEY = "two-goals:v1";
 const BACKUP_VERSION = 1;
 
-export type StorageMode = "local" | "session" | "memory";
+export type StorageMode = "cloud" | "local" | "session" | "memory";
 
 type BackupEnvelope = {
   app: "two-goals";
@@ -33,6 +34,10 @@ let current: AppState = defaultState;
 let loaded = false;
 let storageMode: StorageMode = "memory";
 const listeners = new Set<() => void>();
+let cloudUserId: string | null = null;
+let cloudEmail: string | null = null;
+let cloudStatus: "signed_out" | "loading" | "ready" | "error" = "signed_out";
+let cloudInitialized = false;
 
 function asSprintMonths(value: unknown): SprintMonths {
   return value === 6 ? 6 : 12;
@@ -95,23 +100,44 @@ function persist(next: AppState) {
   try {
     window.localStorage.setItem(STORAGE_KEY, encoded);
     storageMode = "local";
-    return;
   } catch {
-    /* try session */
+    try {
+      window.sessionStorage.setItem(STORAGE_KEY, encoded);
+      storageMode = "session";
+    } catch {
+      storageMode = "memory";
+      // Private mode or a sandboxed preview can block storage. Keep working in memory.
+    }
   }
-  try {
-    window.sessionStorage.setItem(STORAGE_KEY, encoded);
-    storageMode = "session";
-    return;
-  } catch {
-    storageMode = "memory";
-    // Private mode or a sandboxed preview can block storage. Keep working in memory.
+  if (cloudUserId) {
+    void supabase.from("user_app_state").upsert({ user_id: cloudUserId, state: next, updated_at: new Date().toISOString() }).then(({ error }) => {
+      if (error) cloudStatus = "error";
+      else { cloudStatus = "ready"; storageMode = "cloud"; }
+      listeners.forEach((listener) => listener());
+    });
   }
+}
+
+async function loadCloud() {
+  if (cloudInitialized) return;
+  cloudInitialized = true;
+  cloudStatus = "loading";
+  const { data: { user } } = await supabase.auth.getUser();
+  cloudUserId = user?.id ?? null;
+  cloudEmail = user?.email ?? null;
+  if (user) {
+    const { data, error } = await supabase.from("user_app_state").select("state").eq("user_id", user.id).maybeSingle();
+    if (error) cloudStatus = "error";
+    else if (data?.state) { current = mergeState(data.state as Partial<AppState>); storageMode = "cloud"; cloudStatus = "ready"; }
+    else { cloudStatus = "ready"; void supabase.from("user_app_state").upsert({ user_id: user.id, state: current, updated_at: new Date().toISOString() }); }
+  } else cloudStatus = "signed_out";
+  listeners.forEach((listener) => listener());
 }
 
 function load() {
   if (loaded || typeof window === "undefined") return;
   reload();
+  void loadCloud();
 }
 
 function subscribe(listener: () => void) {
@@ -196,6 +222,20 @@ export function useAppState() {
     emit(updater(current));
   }, []);
 
+  const signIn = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    if (error) throw error;
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+    cloudUserId = null;
+    cloudEmail = null;
+    cloudStatus = "signed_out";
+    storageMode = "local";
+    listeners.forEach((listener) => listener());
+  }, []);
+
   const togglePractice = useCallback((date: string, kind: PracticeKind) => {
     setState((previous) => {
       const day = previous.practices[date] ?? emptyPractice();
@@ -246,6 +286,10 @@ export function useAppState() {
     setState,
     hydrated,
     storageMode: mode,
+    cloudEmail,
+    cloudStatus,
+    signIn,
+    signOut,
     togglePractice,
     exportBackup,
     importBackup,
