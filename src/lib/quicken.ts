@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 
 export type QuickenFileKind = "qif" | "csv" | "xlsx" | "qif+xlsx";
 export type AccountClass = "invested" | "cash" | "debt" | "review";
-export type TransactionClass = "income" | "living" | "giving" | "transfer" | "review" | "ignored";
+export type TransactionClass = "income" | "living" | "giving" | "investment" | "transfer" | "review" | "ignored";
 export type Confidence = "high" | "medium" | "low";
 
 export type QuickenAccount = { name: string; type: string; balance: number | null };
@@ -62,6 +62,19 @@ function isGiving(category: string): boolean {
   return ["giving", "tithe", "tithes", "charity", "charitable", "donation", "donations", "offering", "church offering", "ministry"].some((term) => value.includes(term));
 }
 
+function livingCategory(category: string): string {
+  const value = category.toLowerCase();
+  if (/mortgage|rent/.test(value)) return "housing_mortgage_rent";
+  if (/property tax|home repair|maintenance|home improvement/.test(value)) return "housing_tax_maintenance";
+  if (/grocery|supermarket/.test(value)) return "food_groceries";
+  if (/food|restaurant|dining|coffee|fast food/.test(value)) return "food_dining";
+  if (/utility|electric|gas|water|phone|internet|cable/.test(value)) return "utilities";
+  if (/auto|car|fuel|gasoline|parking|transit|transport/.test(value)) return "transportation";
+  if (/insurance/.test(value)) return "insurance";
+  if (/medical|health|doctor|dental|pharmacy|prescription/.test(value)) return "health";
+  return "other_living";
+}
+
 function transactionText(item: QuickenTransaction) {
   return `${item.payee} ${item.category} ${item.memo}`.toLowerCase();
 }
@@ -108,7 +121,7 @@ function classifyTransaction(item: QuickenTransaction): TransactionAudit {
   if (!item.date || item.amount === 0) return { ...item, classification: "ignored", confidence: "high", includedInAverage: false, reason: !item.date ? "Missing/invalid date." : "Zero amount." };
   if (isTransfer(item.category)) return { ...item, classification: "transfer", confidence: "high", includedInAverage: false, reason: "Category looks like a transfer, so it is excluded from income/spending averages." };
   if (looksLikeCreditCardPayment(item)) return { ...item, classification: "review", confidence: "low", includedInAverage: false, reason: "Looks like a credit-card payment; excluded until verified so purchases are not counted twice." };
-  if (looksLikeInvestmentActivity(item)) return { ...item, classification: "review", confidence: "low", includedInAverage: false, reason: "Looks like investment or asset-sale activity; excluded from ordinary income/living averages until verified." };
+  if (looksLikeInvestmentActivity(item)) return { ...item, classification: "investment", confidence: "high", includedInAverage: false, reason: "Looks like an investment contribution, purchase, sale, or reinvestment; excluded from income/living averages." };
   if (looksLikeLoanOrDebtMovement(item)) return { ...item, classification: "review", confidence: "low", includedInAverage: false, reason: "Looks like loan proceeds, a draw, or debt principal movement; excluded from ordinary cash-flow averages until verified." };
   if (looksLikeReimbursementOrRefund(item)) return { ...item, classification: "review", confidence: "low", includedInAverage: false, reason: "Looks like a reimbursement/refund rather than recurring income or ordinary spending; excluded until verified." };
   if (item.amount > 0) return { ...item, classification: "income", confidence: item.category ? "medium" : "low", includedInAverage: true, reason: "Positive non-transfer amount with no non-routine warning signs is treated as income." };
@@ -132,7 +145,7 @@ function buildMonthlyAudit(audit: TransactionAudit[], now: Date) {
     };
   });
   if (!monthlyAudit.length) return { monthsUsed, monthlyAudit, monthlyIncome: null, monthlyExpenses: null, monthlyGiving: null, livingCategoryAverages: {} };
-  const livingCategoryAverages = Object.fromEntries(["housing", "food", "utilities", "transportation", "insurance", "health", "other"].map((category) => [category,
+  const livingCategoryAverages = Object.fromEntries(["housing_mortgage_rent", "housing_tax_maintenance", "food_groceries", "food_dining", "utilities", "transportation", "insurance", "health", "other_living"].map((category) => [category,
     audit.filter((item) => item.classification === "living" && item.date && monthsUsed.includes(item.date.slice(0, 7)) && livingCategory(item.category) === category).reduce((sum, item) => sum + Math.abs(item.amount), 0) / monthsUsed.length,
   ]));
   return {
@@ -158,17 +171,6 @@ function accountTotals(accountAudit: AccountAudit[]) {
 
 function accountKey(account: QuickenAccount) {
   return `${account.name.trim().toLowerCase()}\u0000${account.type.trim().toLowerCase()}`;
-}
-
-function livingCategory(category: string): string {
-  const value = category.toLowerCase();
-  if (/housing|rent|mortgage|property tax|home/.test(value)) return "housing";
-  if (/grocery|food|restaurant|dining|coffee/.test(value)) return "food";
-  if (/utility|electric|gas|water|phone|internet|cable/.test(value)) return "utilities";
-  if (/auto|car|fuel|gasoline|parking|transit|transport/.test(value)) return "transportation";
-  if (/insurance/.test(value)) return "insurance";
-  if (/medical|health|doctor|dental|pharmacy|prescription/.test(value)) return "health";
-  return "other";
 }
 
 export function parseAccountBalancesXlsx(data: ArrayBuffer): ParsedQuicken {

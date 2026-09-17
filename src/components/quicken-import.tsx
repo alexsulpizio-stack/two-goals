@@ -126,7 +126,7 @@ export function QuickenImport() {
       if (selected.monthlyExpenses && preview.livingCategoryAverages) {
         finance.livingCategories = finance.livingCategories.map((category) => ({
           ...category,
-          monthly: Math.round(preview.livingCategoryAverages[category.id] ?? (category.id === "other" ? values.monthlyExpenses : 0)),
+          monthly: Math.round(preview.livingCategoryAverages[category.id] ?? (category.id === "other_living" ? values.monthlyExpenses : 0)),
         }));
       }
       return { ...previous, finance };
@@ -193,7 +193,7 @@ export function QuickenImport() {
         {preview && draft && selected ? (
           <div className="flex flex-col gap-5 rounded-2xl border border-border/80 bg-background/60 p-4 sm:p-5">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between"><div><p className="text-sm font-medium">Review {fileName}</p><p className="text-xs text-muted-foreground">{preview.kind.toUpperCase()} · {preview.transactions} transactions · {preview.accounts} accounts{preview.monthsUsed.length ? ` · averages from ${preview.monthsUsed.join(", ")}` : ""}</p></div><p className="text-xs text-muted-foreground">Nothing changes until you press Update Two Goals.</p></div>
-            <section className="grid gap-3 sm:grid-cols-4"><AuditStat label="Transaction coverage" value={percent(preview.coverage.transactionCoverage)} detail={`${preview.coverage.reviewTransactions} need closer review`} /><AuditStat label="Account coverage" value={percent(preview.coverage.accountCoverage)} detail={`${preview.coverage.reviewAccounts} unrecognized`} /><AuditStat label="Months averaged" value={String(preview.monthsUsed.length)} detail={preview.monthsUsed.join(", ") || "none"} /><AuditStat label="Transfers excluded" value={String(preview.transactionAudit.filter((item) => item.classification === "transfer").length)} detail="not treated as income/spending" /></section>
+            <section className="grid gap-3 sm:grid-cols-5"><AuditStat label="Transaction coverage" value={percent(preview.coverage.transactionCoverage)} detail={`${preview.coverage.reviewTransactions} need closer review`} /><AuditStat label="Account coverage" value={percent(preview.coverage.accountCoverage)} detail={`${preview.coverage.reviewAccounts} unrecognized`} /><AuditStat label="Months averaged" value={String(preview.monthsUsed.length)} detail={preview.monthsUsed.join(", ") || "none"} /><AuditStat label="Investments excluded" value={String(preview.transactionAudit.filter((item) => item.classification === "investment").length)} detail="not treated as income/living" /><AuditStat label="Transfers excluded" value={String(preview.transactionAudit.filter((item) => item.classification === "transfer").length)} detail="not treated as income/spending" /></section>
 
             <div className="grid gap-3">
               {metricOrder.map((key) => {

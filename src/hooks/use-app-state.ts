@@ -46,11 +46,12 @@ function asSprintMonths(value: unknown): SprintMonths {
 function mergeState(parsed: Partial<AppState>): AppState {
   const incomeSources = normalizeIncomeSources(parsed.finance);
   const savedCategories = parsed.finance?.livingCategories;
-  const livingCategories = savedCategories?.length
+  const hasLegacyCategories = savedCategories?.some((category) => ["housing", "food", "other"].includes(category.id));
+  const livingCategories = savedCategories?.length && !hasLegacyCategories
     ? savedCategories
     : defaultState.finance.livingCategories.map((category) => ({
         ...category,
-        monthly: category.id === "other" ? Math.max(0, parsed.finance?.monthlyExpenses ?? 0) : 0,
+        monthly: category.id === "other_living" ? Math.max(0, parsed.finance?.monthlyExpenses ?? 0) : 0,
       }));
   return {
     practices: parsed.practices ?? defaultState.practices,
