@@ -205,7 +205,8 @@ export function QuickenImport() {
 
             <div className="grid gap-3">
               {metricOrder.map((key) => {
-                const available = previewValue(preview, key) != null;\n                const canManuallyOverride = !available && (key === "netWorth" || key === "cash" || key === "debt");
+                const available = previewValue(preview, key) != null;
+                const canManuallyOverride = !available && (key === "netWorth" || key === "cash" || key === "debt");
                 const current = key === "monthlyIncome" ? state.finance.monthlyIncome : key === "netWorth" ? state.finance.netWorth : state.finance[key];
                 return (
                   <label key={key} className={`grid gap-3 rounded-xl border p-3 sm:grid-cols-[auto_1fr_10rem] sm:items-center ${available ? "border-border" : "border-border/50 opacity-60"}`}>
