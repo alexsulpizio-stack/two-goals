@@ -125,6 +125,47 @@ export function IndependenceView() {
         </section>
       ) : null}
 
+      <details className="rounded-2xl border border-border/80 bg-card/80">
+        <summary className="cursor-pointer px-5 py-4 font-medium">See the details behind Need</summary>
+        <div className="grid gap-5 border-t border-border/70 p-5 lg:grid-cols-2">
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-xs tracking-[0.18em] text-muted-foreground uppercase">Monthly income</p>
+              <p className="mt-1 text-sm text-muted-foreground">These named sources add up to the take-home income used by the plan.</p>
+            </div>
+            {(finance.incomeSources ?? []).filter((source) => source.name || source.monthly > 0).length > 0 ? (
+              <div className="divide-y rounded-xl border">
+                {(finance.incomeSources ?? []).filter((source) => source.name || source.monthly > 0).map((source) => (
+                  <div key={source.id} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+                    <span>{source.name || "Income source"}</span>
+                    <span className="tabular-nums">{formatMoney(source.monthly)} / month</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between gap-4 bg-muted/50 px-4 py-3 text-sm font-medium">
+                  <span>Total take-home</span>
+                  <span className="tabular-nums">{formatMoney(plan.monthlySavings + finance.monthlyExpenses + finance.monthlyGiving)} / month</span>
+                </div>
+              </div>
+            ) : (
+              <p className="rounded-xl border p-4 text-sm text-muted-foreground">No named income sources yet. Add them on the Steward page.</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-xs tracking-[0.18em] text-muted-foreground uppercase">Monthly life cost</p>
+              <p className="mt-1 text-sm text-muted-foreground">Need currently uses your living total plus giving. Living is one combined number here, not category-level spending.</p>
+            </div>
+            <div className="divide-y rounded-xl border">
+              <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm"><span>Living</span><span className="tabular-nums">{formatMoney(finance.monthlyExpenses)} / month</span></div>
+              <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm"><span>Giving</span><span className="tabular-nums">{formatMoney(finance.monthlyGiving)} / month</span></div>
+              <div className="flex items-center justify-between gap-4 bg-muted/50 px-4 py-3 text-sm font-medium"><span>Annual spending</span><span className="tabular-nums">{formatMoney(plan.annualSpend)} / year</span></div>
+            </div>
+            <p className="text-sm leading-relaxed text-muted-foreground">{formatMoney(plan.annualSpend)} ÷ {formatPercent(finance.swr / 100)} withdrawal rate = <span className="font-medium text-foreground">{formatMoney(plan.fiNumber)} Need</span>.</p>
+          </div>
+        </div>
+      </details>
+
       <Card className="bg-card/80">
         <CardHeader className="border-b">
           <CardDescription>1 · Your numbers</CardDescription>
