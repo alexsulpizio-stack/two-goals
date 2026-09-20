@@ -96,17 +96,16 @@ export function IndependenceView() {
               {plan.hasInputs ? `Independent by ${deadline}` : "Start with your real numbers"}
             </h2>
           </div>
-          <div className="flex rounded-full bg-white/10 p-1">
-            {([6, 12] as SprintMonths[]).map((months) => (
-              <button
-                key={months}
-                type="button"
-                onClick={() => updateFinance({ targetMonths: months })}
-                className={`rounded-full px-4 py-2 text-sm ${finance.targetMonths === months ? "bg-white text-steward" : "text-white/80 hover:text-white"}`}
-              >
-                {months} months
-              </button>
-            ))}
+          <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2">
+            <label htmlFor="target-years" className="text-sm text-white/80">Target</label>
+            <select
+              id="target-years"
+              value={finance.targetMonths / 12}
+              onChange={(event) => updateFinance({ targetMonths: Number(event.target.value) * 12 })}
+              className="rounded-full bg-white px-3 py-1.5 text-sm text-steward outline-none"
+            >
+              {Array.from({ length: 11 }, (_, years) => <option key={years} value={years}>{years} {years === 1 ? "year" : "years"}</option>)}
+            </select>
           </div>
         </div>
 
@@ -128,7 +127,7 @@ export function IndependenceView() {
         <section className="grid gap-4 md:grid-cols-3">
           <SummaryCard label="Current monthly savings" value={formatMoney(plan.monthlySavings)} note={`${formatPercent(plan.savingsRate)} of take-home`} />
           <SummaryCard label="Additional take-home needed" value={formatMoney(sprint.incomeLift)} note={`Approx. ${grossGap} gross at ${finance.estimatedTaxRate}% tax`} />
-          <SummaryCard label="Current pace" value={formatDuration(plan.monthsRemaining)} note={sprint.onTrack ? `Inside the ${finance.targetMonths}-month target` : `Outside the ${finance.targetMonths}-month target`} />
+          <SummaryCard label="Current pace" value={formatDuration(plan.monthsRemaining)} note={sprint.onTrack ? `Inside the ${finance.targetMonths / 12}-year target` : `Outside the ${finance.targetMonths / 12}-year target`} />
         </section>
       ) : null}
 

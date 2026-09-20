@@ -40,7 +40,8 @@ let cloudStatus: "signed_out" | "loading" | "ready" | "error" = "signed_out";
 let cloudInitialized = false;
 
 function asSprintMonths(value: unknown): SprintMonths {
-  return value === 6 ? 6 : 12;
+  const months = Number(value);
+  return Number.isInteger(months) && months >= 0 && months <= 120 && months % 12 === 0 ? months : 12;
 }
 
 function mergeState(parsed: Partial<AppState>): AppState {

@@ -12,7 +12,7 @@ export type PrayerEntry = {
   listening: string;
 };
 
-export type SprintMonths = 6 | 12;
+export type SprintMonths = number;
 
 export type StreamStatus = "blank" | "named" | "asked" | "earning";
 

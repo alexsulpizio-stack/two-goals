@@ -1,7 +1,7 @@
 import type { FinanceInputs, SprintMonths } from "./types";
 import { namedIncomeSources, totalMonthlyIncome } from "./income";
 
-export const SPRINT_WINDOWS: SprintMonths[] = [6, 12];
+export const SPRINT_WINDOWS: SprintMonths[] = Array.from({ length: 11 }, (_, years) => years * 12);
 
 export type IndependencePlan = {
   annualSpend: number;
