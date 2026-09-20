@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
-import { QuickenImport } from "@/components/quicken-import";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -208,13 +207,6 @@ export function IndependenceView() {
           </div>
         </CardContent>
       </Card>
-
-      <details className="rounded-2xl border border-border/80 bg-card/80">
-        <summary className="cursor-pointer px-5 py-4 font-medium">Import from Quicken Classic</summary>
-        <div className="border-t border-border/70 p-4 sm:p-5">
-          <QuickenImport />
-        </div>
-      </details>
 
       <Card className="bg-card/80">
         <CardHeader className="border-b">
