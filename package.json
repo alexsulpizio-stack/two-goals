@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 43147",
     "lint": "eslint",
-    "test": "tsx scripts/finance-test.ts && tsx scripts/ledger-test.ts && tsx scripts/next-move-test.ts && tsx scripts/income-test.ts && tsx scripts/income-plays-test.ts && tsx scripts/interview-test.ts && tsx scripts/quicken-test.ts && tsx scripts/two-goals-2-test.ts && tsx scripts/guide-config-test.ts && tsx scripts/guide-access-test.ts"
+    "test": "node --import tsx scripts/retirement-engine-test.ts && node --import tsx scripts/finance-test.ts && node --import tsx scripts/ledger-test.ts && node --import tsx scripts/next-move-test.ts && node --import tsx scripts/income-test.ts && node --import tsx scripts/income-plays-test.ts && node --import tsx scripts/interview-test.ts && node --import tsx scripts/quicken-test.ts && node --import tsx scripts/two-goals-2-test.ts && node --import tsx scripts/guide-config-test.ts && node --import tsx scripts/guide-access-test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

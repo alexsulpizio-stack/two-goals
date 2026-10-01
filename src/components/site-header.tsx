@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 
 import { DataSafety } from "@/components/data-safety";
 import { Mark } from "@/components/mark";
@@ -9,7 +10,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/", label: "Today" },
   { href: "/walk", label: "Walk" },
-  { href: "/independence", label: "Independence" },
+  { href: "/independence", label: "Decision Engine" },
 ];
 
 export function SiteHeader() {
@@ -18,10 +19,10 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-20 border-b border-border/70 bg-background/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <a href="/" className="flex shrink-0 items-center gap-2.5 text-foreground">
+        <Link href="/" className="flex shrink-0 items-center gap-2.5 text-foreground">
           <Mark className="size-8 text-faith" />
           <span className="font-heading hidden text-xl tracking-tight sm:inline">Two Goals</span>
-        </a>
+        </Link>
         <nav aria-label="Primary" className="flex items-center gap-0.5 rounded-full border border-border/80 bg-card/80 p-1">
           {links.map((link) => {
             const active =
@@ -30,7 +31,7 @@ export function SiteHeader() {
                 : pathname.startsWith(link.href) ||
                   (link.href === "/independence" && (pathname.startsWith("/steward") || pathname.startsWith("/counsel")));
             return (
-              <a
+              <Link
                 key={link.href}
                 href={link.href}
                 className={cn(
@@ -39,7 +40,7 @@ export function SiteHeader() {
                 )}
               >
                 {link.label}
-              </a>
+              </Link>
             );
           })}
         </nav>

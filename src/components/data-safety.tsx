@@ -21,7 +21,7 @@ const storageCopy: Record<StorageMode, { label: string; detail: string }> = {
 };
 
 export function DataSafety() {
-  const { storageMode, cloudEmail, cloudStatus, signIn, signOut, exportBackup, importBackup, reset } = useAppState();
+  const { storageMode, cloudEmail, signIn, signOut, exportBackup, importBackup, reset } = useAppState();
   const inputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [email, setEmail] = useState("");

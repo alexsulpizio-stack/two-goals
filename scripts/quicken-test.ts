@@ -166,7 +166,8 @@ const nonRoutine = previewQuickenImport("non-routine.csv", nonRoutineCsv, new Da
 assert.equal(nonRoutine.monthlyIncome, 5000);
 assert.equal(nonRoutine.monthlyExpenses, 1000);
 assert.equal(nonRoutine.baselineTransactions, 2);
-assert.equal(nonRoutine.transactionAudit.filter((item) => item.classification === "review").length, 4);
+assert.equal(nonRoutine.transactionAudit.filter((item) => item.classification === "review").length, 3);
+assert.equal(nonRoutine.transactionAudit.find((item) => item.category === "Stock Sale")?.classification, "investment");
 assert.equal(nonRoutine.transactionAudit.find((item) => item.category === "Credit Card Payment")?.includedInAverage, false);
 assert.equal(nonRoutine.transactionAudit.find((item) => item.category === "Stock Sale")?.includedInAverage, false);
 assert.equal(nonRoutine.transactionAudit.find((item) => item.category === "HELOC Draw")?.includedInAverage, false);

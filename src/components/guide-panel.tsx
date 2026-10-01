@@ -5,7 +5,7 @@ import { Bot, ExternalLink, LockKeyhole, Send, ShieldCheck } from "lucide-react"
 
 import { useAppState } from "@/hooks/use-app-state";
 import { todayKey } from "@/lib/dates";
-import { independencePlan, sprintPlan } from "@/lib/finance";
+import { runRetirementEngine, strategyLabel } from "@/lib/retirement-engine";
 
 type GuideError = {
   message: string;
@@ -67,23 +67,26 @@ export function GuidePanel({
   }, []);
 
   const context = useMemo(() => {
-    const plan = independencePlan(state.finance);
-    const sprint = sprintPlan(state.finance, state.finance.targetMonths);
+    const decision = runRetirementEngine(state.retirementEngine);
+    const selected = decision.selected;
     const practice = state.practices[todayKey()];
 
     return {
       finance: {
         inputs: state.finance,
+        calculated: { legacyMonthlyPlan: "retained for older saved data; the Decision Engine is authoritative" },
+      },
+      retirementEngine: {
+        inputs: state.retirementEngine,
         calculated: {
-          independenceTarget: plan.fiNumber,
-          usableCapital: plan.fiCapital,
-          progress: plan.progress,
-          monthlySavings: plan.monthlySavings,
-          monthsRemaining: plan.monthsRemaining,
-          targetMonths: state.finance.targetMonths,
-          additionalTakeHomeNeeded: sprint.incomeLift,
-          estimatedGrossIncomeNeeded: sprint.grossIncomeLift,
-          onTrack: sprint.onTrack,
+          strategy: strategyLabel(state.retirementEngine.selectedStrategy),
+          retirementAge: selected.retirementAge,
+          status: selected.status,
+          age95Balance: selected.endingBalanceAtTarget,
+          maximumUnfundedGap: selected.maximumUnfundedGap,
+          firstYearHealthcare: selected.firstYearHealthcare,
+          ageComparison: decision.ageComparison.map((row) => ({ age: row.retirementAge, status: row.status, age95Balance: row.endingBalanceAtTarget, maximumUnfundedGap: row.maximumUnfundedGap })),
+          strategyComparison: decision.strategyComparison.map((row) => ({ strategy: strategyLabel(row.strategy), status: row.status, age95Balance: row.endingBalanceAtTarget, maximumUnfundedGap: row.maximumUnfundedGap })),
         },
       },
       today: {
