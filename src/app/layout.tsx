@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
+import type { ReactNode } from "react";
 
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
     "A personal compass for two aims: to live eternally with Jesus Christ, and to live financially independent.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html
       lang="en"

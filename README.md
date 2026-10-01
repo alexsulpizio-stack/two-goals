@@ -11,7 +11,7 @@ The first is a gift, not a score. The second is a stewardship problem that can b
 
 - **Today** — focused state of both goals, next actions, and AI Guide.
 - **Walk** — today’s Word, prayer, gathered church, love of neighbor, prayer journal, and recent pattern.
-- **Independence** — target, current capital, gap, income needed, Quicken import/audit, AI Guide, income plan, assumptions, and snapshots.
+- **Decision Engine** — retirement-age and strategy comparison, healthcare phases, Social Security timing, bridge-job economics, stress tests, AI Guide, and editable assumptions.
 
 The former **Counsel** experience is the **Plan Assistant**, launched from Independence when help is needed turning an income gap into a practical week of work. The legacy **Steward** route redirects to Independence.
 
@@ -101,19 +101,13 @@ OPENAI_MODEL=gpt-5-mini
 
 When AI Gateway is used, requests explicitly disable prompt training. Guide sends structured financial state, recent snapshots, and today’s practice completion. Prayer-journal text is never sent. Plan Assistant answers are excluded by default and can be included explicitly by the user.
 
-## Independence model
+## Retirement decision engine
 
-Independence target:
+The Decision Engine replaces the former binary Independence calculation. It compares full retirement, an optional part-time healthcare bridge job, optional contract work, a sequence-of-returns stress case, and the age-60 fallback across retirement ages 55 through 60.
 
-`(annual living expenses + annual giving) / withdrawal rate`
+Each scenario projects core assets year by year through the selected longevity horizon. It models spending inflation, the mortgage payoff, healthcare phases before and after Medicare, independently selected Social Security claim ages, after-tax earned income, pretax withdrawals, taxes, optional life-insurance contingency, and unfunded gaps.
 
-Capital counted toward the target:
-
-`invested assets + cash above emergency reserve - debt`
-
-The 6- or 12-month plan compares required monthly saving with the current surplus and reports the additional take-home income needed. The estimated tax rate translates that gap into approximate gross income.
-
-Defaults are a 5% real return and 4% withdrawal rate.
+The core case does not require speculative project income or a bridge job that has not been secured. The bridge-job comparison measures after-tax wages plus family healthcare cost avoided, less employee coverage, expected out-of-pocket costs, and work costs.
 
 ## Architecture
 

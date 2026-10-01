@@ -4,9 +4,8 @@ import { ArrowRight, CheckCircle2, Circle } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppState } from "@/hooks/use-app-state";
-import { addMonths, formatLongDate, formatMonthYear, todayKey } from "@/lib/dates";
-import { formatMoney, independencePlan, sprintPlan } from "@/lib/finance";
-import { nextMove } from "@/lib/next-move";
+import { formatLongDate, todayKey } from "@/lib/dates";
+import { formatModelMoney, runRetirementEngine, strategyLabel } from "@/lib/retirement-engine";
 import { verseOfTheDay } from "@/lib/scripture";
 import { emptyPractice } from "@/lib/types";
 
@@ -23,10 +22,8 @@ export function TodayHome() {
   const today = todayKey();
   const practice = state.practices[today] ?? emptyPractice();
   const completed = practiceLabels.filter(([key]) => practice[key]).length;
-  const plan = independencePlan(state.finance);
-  const sprint = sprintPlan(state.finance, state.finance.targetMonths);
-  const move = nextMove(plan, sprint, state.finance);
-  const deadline = formatMonthYear(addMonths(new Date(), state.finance.targetMonths));
+  const decision = runRetirementEngine(state.retirementEngine);
+  const selected = decision.selected;
 
   return (
     <div className="flex flex-col gap-8 sm:gap-10">
@@ -72,33 +69,24 @@ export function TodayHome() {
 
         <Card className="border-steward/30 bg-steward/5">
           <CardHeader className="border-b border-steward/20">
-            <CardDescription>Goal 02 · Independence</CardDescription>
+            <CardDescription>Goal 02 · Decision Engine</CardDescription>
             <CardTitle className="font-heading text-2xl sm:text-3xl">
-              {plan.hasInputs ? (sprint.onTrack ? `On pace for ${deadline}` : "The gap is clear.") : "Set the financial baseline."}
+              {selected.status === "GREEN" ? `Age ${selected.retirementAge} path holds.` : selected.status === "YELLOW" ? `Age ${selected.retirementAge} path is thin.` : `Age ${selected.retirementAge} path has a gap.`}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-5 pt-5">
-            {plan.hasInputs ? (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <Metric label="Target" value={formatMoney(plan.fiNumber)} />
-                  <Metric label="Have" value={formatMoney(plan.fiCapital)} />
-                  <Metric label="Progress" value={`${Math.round(plan.progress * 100)}%`} />
-                  <Metric label="Monthly gap" value={formatMoney(sprint.incomeLift)} />
-                </div>
-                <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-                  <p className="text-xs tracking-[0.14em] text-muted-foreground uppercase">Next action</p>
-                  <p className="mt-1 font-heading text-xl leading-tight">{move.headline}</p>
-                  {move.lines[0] ? <p className="mt-2 text-sm text-muted-foreground">{move.lines[0]}</p> : null}
-                </div>
-              </>
-            ) : (
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Add your assets, income, living costs, and giving. Two Goals will calculate the independence target and the income gap.
-              </p>
-            )}
+            <div className="grid grid-cols-2 gap-3">
+              <Metric label="Strategy" value={strategyLabel(state.retirementEngine.selectedStrategy)} />
+              <Metric label="Age 95 balance" value={formatModelMoney(selected.endingBalanceAtTarget)} />
+              <Metric label="Maximum gap" value={selected.maximumUnfundedGap > 0 ? formatModelMoney(selected.maximumUnfundedGap) : "None"} />
+              <Metric label="Healthcare" value={formatModelMoney(selected.firstYearHealthcare)} />
+            </div>
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+              <p className="text-xs tracking-[0.14em] text-muted-foreground uppercase">Decision readout</p>
+              <p className="mt-1 font-heading text-xl leading-tight">{selected.interpretation}</p>
+            </div>
             <a href="/independence" className="inline-flex items-center gap-2 text-sm font-medium text-steward underline-offset-4 hover:underline">
-              Open Independence <ArrowRight className="size-4" />
+              Open Decision Engine <ArrowRight className="size-4" />
             </a>
           </CardContent>
         </Card>

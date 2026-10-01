@@ -115,8 +115,11 @@ export function monthsToTarget({ present, target, monthlyContribution, annualRat
   }
   const numerator = target * monthlyRate + monthlyContribution;
   const denominator = present * monthlyRate + monthlyContribution;
-  if (denominator <= 0 || numerator / denominator <= 1) return null;
-  return Math.log(numerator / denominator) / Math.log(1 + monthlyRate);
+  const ratio = numerator / denominator;
+  if (denominator === 0 || ratio <= 0) return null;
+  if (monthlyRate > 0 && ratio <= 1) return null;
+  if (monthlyRate < 0 && ratio >= 1) return null;
+  return Math.log(ratio) / Math.log(1 + monthlyRate);
 }
 
 export function formatMoney(amount: number): string {
