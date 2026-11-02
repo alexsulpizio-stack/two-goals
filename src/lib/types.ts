@@ -36,6 +36,8 @@ export type LivingCategory = {
 };
 
 export type RetirementEngineInputs = {
+  /** True only for explicitly synthetic starter data; legacy saved inputs are retained. */
+  isExample?: boolean;
   selectedStrategy: RetirementStrategy;
   selectedMarketCase: MarketCase;
   retirementAge: number;
@@ -47,6 +49,10 @@ export type RetirementEngineInputs = {
   coreAssets: number;
   annualSaving: number;
   contractIncomeAfterTax: number;
+  projectIncomeAfterTax: number;
+  projectIncomeEndYear: number | null;
+  livingCostBaseYear: number;
+  healthcareCostBaseYear: number;
   darleneNetWages: number;
   darleneGrossWages: number;
   useLifeInsurance: boolean;
@@ -69,11 +75,15 @@ export type RetirementEngineInputs = {
   normalizedSpending: number;
   permanentSpendingAdjustmentPct: number;
   additionalChildSupport: number;
+  /** Legacy value retained for backup compatibility; never interpreted as an end year. */
   childSupportThroughAge: number;
+  childSupportEndYear: number | null;
   annualMortgagePayment: number;
   mortgagePayoffYear: number;
   stressExtraChildSupport: number;
+  /** Legacy value retained for backup compatibility; end year must be confirmed. */
   stressChildSupportThroughAge: number;
+  stressChildSupportEndYear: number | null;
   oneTimeUnexpectedExpense: number;
   acaFamilyGrossPremium: number;
   acaFamilySubsidyEstimate: number;
@@ -177,67 +187,35 @@ export const defaultFinance: FinanceInputs = {
   targetMonths: 12,
 };
 
+// Synthetic starter example only. Never embed household source records here.
 export const defaultRetirementEngine: RetirementEngineInputs = {
-  selectedStrategy: "full",
-  selectedMarketCase: "base",
-  retirementAge: 55,
-  alexClaimAge: 67,
-  darleneClaimAge: 67,
-  asOfYear: 2026,
-  alexBirthYear: 1973,
-  darleneBirthYear: 1969,
-  coreAssets: 1_437_958.5,
-  annualSaving: 38_631,
-  contractIncomeAfterTax: 0,
-  darleneNetWages: 0,
-  darleneGrossWages: 0,
-  useLifeInsurance: false,
-  lifeInsuranceCashValue: 135_589.05,
-  targetPlanningAge: 95,
-  maximumPlanningAge: 100,
-  baseReturnPct: 5,
-  conservativeReturnPct: 3.5,
-  stressNormalReturnPct: 3.5,
-  stressYear0ReturnPct: -20,
-  stressYear1ReturnPct: -10,
-  stressYear2ReturnPct: 2,
-  stressYear3ReturnPct: 3,
-  baseInflationPct: 2.5,
-  conservativeInflationPct: 3,
-  stressInflationPct: 4.5,
-  baseTaxPct: 22,
-  conservativeTaxPct: 25,
-  stressTaxPct: 27,
-  normalizedSpending: 118_200,
-  permanentSpendingAdjustmentPct: 0,
-  additionalChildSupport: 0,
-  childSupportThroughAge: 27,
-  annualMortgagePayment: 16_803.12,
-  mortgagePayoffYear: 2036,
-  stressExtraChildSupport: 20_000,
-  stressChildSupportThroughAge: 30,
-  oneTimeUnexpectedExpense: 50_000,
-  acaFamilyGrossPremium: 24_000,
-  acaFamilySubsidyEstimate: 10_000,
-  acaFamilyOutOfPocket: 4_000,
-  alexSingleNetPremium: 9_000,
-  alexSingleOutOfPocket: 2_500,
-  darleneMedicareAnnualCost: 5_500,
-  alexMedicareAnnualCost: 5_500,
-  darleneMedicareStartYear: 2034,
-  alexMedicareStartYear: 2038,
-  stressHealthcareMultiplier: 1.5,
-  alexSocialSecurity: { 62: 2_540, 67: 3_608, 70: 4_474 },
-  darleneSocialSecurity: { 62: 1_411, 67: 2_004, 70: 2_485 },
-  bridgeHoursPerWeek: 20,
-  bridgeHourlyPay: 25,
-  bridgeWeeksPerYear: 50,
-  bridgeTaxPct: 20,
-  bridgeEmployeePlusSpousePremium: 8_400,
-  bridgeOutOfPocket: 2_500,
-  bridgeCommutingCosts: 1_500,
-  bridgeStartingAge: 55,
-  bridgeEndingAge: 60,
+  isExample: true,
+  selectedStrategy: "full", selectedMarketCase: "base", retirementAge: 59,
+  alexClaimAge: 67, darleneClaimAge: 67, asOfYear: 2020,
+  alexBirthYear: 1970, darleneBirthYear: 1968,
+  coreAssets: 1_000_000, annualSaving: 10_000, contractIncomeAfterTax: 0,
+  projectIncomeAfterTax: 0, projectIncomeEndYear: null,
+  livingCostBaseYear: 2020, healthcareCostBaseYear: 2020,
+  darleneNetWages: 0, darleneGrossWages: 0, useLifeInsurance: false,
+  lifeInsuranceCashValue: 20_000, targetPlanningAge: 90, maximumPlanningAge: 100,
+  baseReturnPct: 4, conservativeReturnPct: 2, stressNormalReturnPct: 2,
+  stressYear0ReturnPct: -15, stressYear1ReturnPct: -5, stressYear2ReturnPct: 1, stressYear3ReturnPct: 2,
+  baseInflationPct: 2, conservativeInflationPct: 3, stressInflationPct: 4,
+  baseTaxPct: 20, conservativeTaxPct: 25, stressTaxPct: 30,
+  normalizedSpending: 40_000, permanentSpendingAdjustmentPct: 0,
+  additionalChildSupport: 0, childSupportThroughAge: 27, childSupportEndYear: null,
+  annualMortgagePayment: 10_000, mortgagePayoffYear: 2035,
+  stressExtraChildSupport: 8_000, stressChildSupportThroughAge: 30, stressChildSupportEndYear: null,
+  oneTimeUnexpectedExpense: 12_000,
+  acaFamilyGrossPremium: 7_000, acaFamilySubsidyEstimate: 2_000, acaFamilyOutOfPocket: 1_000,
+  alexSingleNetPremium: 3_000, alexSingleOutOfPocket: 1_000,
+  darleneMedicareAnnualCost: 2_000, alexMedicareAnnualCost: 2_000,
+  darleneMedicareStartYear: 2033, alexMedicareStartYear: 2035, stressHealthcareMultiplier: 1.5,
+  alexSocialSecurity: { 62: 800, 67: 1_000, 70: 1_200 },
+  darleneSocialSecurity: { 62: 700, 67: 900, 70: 1_100 },
+  bridgeHoursPerWeek: 10, bridgeHourlyPay: 20, bridgeWeeksPerYear: 40,
+  bridgeTaxPct: 20, bridgeEmployeePlusSpousePremium: 2_000, bridgeOutOfPocket: 500,
+  bridgeCommutingCosts: 1_111, bridgeStartingAge: 55, bridgeEndingAge: 60,
 };
 
 export const emptyInterview = (): InterviewState => ({

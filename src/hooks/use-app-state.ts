@@ -12,16 +12,12 @@ import { asInterview } from "@/lib/interview";
 import {
   defaultState,
   emptyPractice,
-  defaultRetirementEngine,
   type AppState,
-  type ClaimAge,
   type PracticeKind,
-  type RetirementEngineInputs,
-  type RetirementStrategy,
-  type MarketCase,
   type SprintMonths,
 } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
+import { asRetirementEngine } from "@/lib/retirement-inputs";
 
 const STORAGE_KEY = "two-goals:v1";
 const BACKUP_VERSION = 1;
@@ -47,38 +43,6 @@ let cloudInitialized = false;
 function asSprintMonths(value: unknown): SprintMonths {
   const months = Number(value);
   return Number.isInteger(months) && months >= 0 && months <= 120 && months % 12 === 0 ? months : 12;
-}
-
-function asRetirementStrategy(value: unknown): RetirementStrategy {
-  return value === "bridge" || value === "contract" || value === "stress" || value === "age60" ? value : "full";
-}
-
-function asMarketCase(value: unknown): MarketCase {
-  return value === "conservative" || value === "sequence" ? value : "base";
-}
-
-function asClaimAge(value: unknown): ClaimAge {
-  return value === 62 || value === 70 ? value : 67;
-}
-
-function asNumber(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-function asRetirementEngine(value: Partial<RetirementEngineInputs> | undefined): RetirementEngineInputs {
-  const raw = value ?? {};
-  const merged = { ...defaultRetirementEngine, ...raw };
-  return {
-    ...merged,
-    selectedStrategy: asRetirementStrategy(raw.selectedStrategy),
-    selectedMarketCase: asMarketCase(raw.selectedMarketCase),
-    retirementAge: Math.min(60, Math.max(55, Math.round(asNumber(raw.retirementAge, merged.retirementAge)))),
-    alexClaimAge: asClaimAge(raw.alexClaimAge),
-    darleneClaimAge: asClaimAge(raw.darleneClaimAge),
-    alexSocialSecurity: { ...defaultRetirementEngine.alexSocialSecurity, ...(raw.alexSocialSecurity ?? {}) },
-    darleneSocialSecurity: { ...defaultRetirementEngine.darleneSocialSecurity, ...(raw.darleneSocialSecurity ?? {}) },
-    useLifeInsurance: typeof raw.useLifeInsurance === "boolean" ? raw.useLifeInsurance : merged.useLifeInsurance,
-  };
 }
 
 function mergeState(parsed: Partial<AppState>): AppState {
