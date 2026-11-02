@@ -103,9 +103,17 @@ When AI Gateway is used, requests explicitly disable prompt training. Guide send
 
 ## Retirement decision engine
 
-The Decision Engine replaces the former binary Independence calculation. It compares full retirement, an optional part-time healthcare bridge job, optional contract work, a sequence-of-returns stress case, and the age-60 fallback across retirement ages 55 through 60.
+The Decision Engine replaces the former binary Independence calculation. It compares full retirement, an optional part-time healthcare bridge job, optional contract work, a combined D stress case, and the age-60 fallback across retirement ages 55 through 60.
 
-Each scenario projects core assets year by year through the selected longevity horizon. It models spending inflation, the mortgage payoff, healthcare phases before and after Medicare, independently selected Social Security claim ages, after-tax earned income, pretax withdrawals, taxes, optional life-insurance contingency, and unfunded gaps.
+Fresh sessions use clearly labeled synthetic example financial values, not household records. Existing saved financial inputs are preserved without replacement. This cleanup removes personal default figures from the current source; it does not rewrite earlier Git history.
+
+The default main planning horizon is age 90, with retirement at 59. Each scenario still projects annual cash flows through age 100 by default; the main status, minimum balance, and maximum annual unfunded need use only years through the main horizon. Separate age-95/100 balances and later-life shortfalls remain visible. Changing the main horizon never shortens annual income or cash flows. Saved custom inputs and timing are preserved; an explicit timing-only action applies 59/90 when desired.
+
+Older saved plans that lack price-base controls initially use their saved as-of year as a visibly provisional basis; confirm these years against the source amounts. Living and healthcare costs inflate from their explicit price-base years, while mortgage payments and bridge work costs stay fixed nominal. Optional net project income is fixed nominal with an inclusive end year; blank means the complete modeled horizon. Positive child support requires a confirmed inclusive end calendar year. Legacy age cutoffs remain in backups but are not guessed into dates; incomplete support cases are NOT TESTED. Strategy comparisons A/B/C use base assumptions; D is the combined stress case and E retires at 60.
+
+The historical/provisional assumptions are not a current readiness assessment. The 25% margin is a retained heuristic on aggregate assets, not a validated or segregated liquid reserve. Taxes and access remain a pooled simplification; the partial income diagnostic is not ACA MAGI, subsidies are fixed placeholders, and positive income surplus is not reinvested.
+
+Each scenario models spending inflation, the mortgage payoff, healthcare phases before and after Medicare, independently selected Social Security claim ages, after-tax earned income, pretax withdrawals, taxes, optional life-insurance contingency, and unfunded gaps.
 
 The core case does not require speculative project income or a bridge job that has not been secured. The bridge-job comparison measures after-tax wages plus family healthcare cost avoided, less employee coverage, expected out-of-pocket costs, and work costs.
 
